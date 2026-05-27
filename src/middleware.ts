@@ -1,54 +1,80 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { jwtVerify } from "jose";
-
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET!
-);
+import { createServerClient } from "@supabase/ssr";
 
 export async function middleware(request: NextRequest) {
-  const token = request.cookies.get("token")?.value;
+  let supabaseResponse = NextResponse.next({ request });
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          );
+          supabaseResponse = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
+  // Refresh the session and get the user
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   const { pathname } = request.nextUrl;
 
   // Auth pages — redirect to chat if already logged in
   const authPaths = ["/login", "/register"];
   if (authPaths.includes(pathname)) {
-    if (token) {
-      try {
-        await jwtVerify(token, JWT_SECRET);
-        return NextResponse.redirect(new URL("/chat", request.url));
-      } catch {
-        // Token invalid, allow access to auth pages
-      }
+    if (user) {
+      return NextResponse.redirect(new URL("/chat", request.url));
     }
-    return NextResponse.next();
+    return supabaseResponse;
   }
 
   // Protected routes — redirect to login if not authenticated
-  if (pathname.startsWith("/chat") || pathname.startsWith("/api/messages") || pathname.startsWith("/api/conversations")) {
-    if (!token) {
+  if (
+    pathname.startsWith("/chat") ||
+    pathname.startsWith("/profile") ||
+    pathname.startsWith("/api/messages") ||
+    pathname.startsWith("/api/conversations") ||
+    pathname.startsWith("/api/users") ||
+    pathname.startsWith("/api/auth/me") ||
+    pathname.startsWith("/api/profile")
+  ) {
+    if (!user) {
       if (pathname.startsWith("/api/")) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
-      return NextResponse.redirect(new URL("/login", request.url));
-    }
-
-    try {
-      await jwtVerify(token, JWT_SECRET);
-      return NextResponse.next();
-    } catch {
-      if (pathname.startsWith("/api/")) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      }
-      const resp = NextResponse.redirect(new URL("/login", request.url));
-      resp.cookies.delete("token");
-      return resp;
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
     }
   }
 
-  return NextResponse.next();
+  return supabaseResponse;
 }
 
 export const config = {
-  matcher: ["/chat/:path*", "/login", "/register", "/api/messages/:path*", "/api/conversations/:path*", "/api/users/:path*", "/api/auth/me", "/api/sse"],
+  matcher: [
+    "/chat/:path*",
+    "/login",
+    "/register",
+    "/profile",
+    "/api/messages/:path*",
+    "/api/conversations/:path*",
+    "/api/users/:path*",
+    "/api/auth/me",
+    "/api/profile/:path*",
+  ],
 };

@@ -21,33 +21,6 @@ async function request<T>(
   return body as T;
 }
 
-// ── Auth ────────────────────────────────────────────
-
-export async function login(
-  email: string,
-  password: string
-): Promise<{ user: User }> {
-  return request("/api/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
-}
-
-export async function register(
-  email: string,
-  username: string,
-  password: string
-): Promise<{ user: User }> {
-  return request("/api/auth/register", {
-    method: "POST",
-    body: JSON.stringify({ email, username, password }),
-  });
-}
-
-export async function getCurrentUser(): Promise<{ user: User }> {
-  return request("/api/auth/me");
-}
-
 // ── Conversations ───────────────────────────────────
 
 export async function getConversations(): Promise<{
@@ -63,11 +36,15 @@ export async function getConversation(
 }
 
 export async function createConversation(
-  participantId: string
+  participantOrIds: string | string[]
 ): Promise<{ conversation: Conversation }> {
+  const body = Array.isArray(participantOrIds)
+    ? { participantIds: participantOrIds }
+    : { participantId: participantOrIds };
+
   return request("/api/conversations", {
     method: "POST",
-    body: JSON.stringify({ participantId }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -75,6 +52,54 @@ export async function searchUsers(
   query: string
 ): Promise<{ users: User[] }> {
   return request(`/api/users/search?q=${encodeURIComponent(query)}`);
+}
+
+// ── Profile ─────────────────────────────────────────
+
+export async function getProfile(): Promise<{ user: User }> {
+  return request("/api/profile");
+}
+
+export async function getPublicProfile(
+  id: string
+): Promise<{ user: Pick<User, "username" | "avatarUrl" | "createdAt"> }> {
+  return request(`/api/profile/${encodeURIComponent(id)}`);
+}
+
+export async function updateProfile(data: {
+  displayName?: string;
+  avatarUrl?: string;
+}): Promise<{ user: User }> {
+  return request("/api/profile", {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function uploadAvatar(file: File): Promise<{
+  user: User;
+  avatarUrl: string;
+}> {
+  const formData = new FormData();
+  formData.append("avatar", file);
+
+  const res = await fetch("/api/profile/avatar", {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+
+  const body = await res.json();
+
+  if (!res.ok) {
+    throw new Error(body.error || `Upload failed (${res.status})`);
+  }
+
+  return body;
+}
+
+export async function logout(): Promise<void> {
+  await request("/api/auth/logout", { method: "DELETE" });
 }
 
 // ── Messages ────────────────────────────────────────

@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getUserIdFromToken } from "@/lib/auth";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function POST(request: NextRequest) {
-  const token = request.cookies.get("token")?.value;
-  if (!token) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const userId = getUserIdFromToken(token);
-  if (!userId) {
-    return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-  }
-
   try {
+    const supabase = await createSupabaseServerClient();
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const { conversationId, content } = body;
 
@@ -31,15 +31,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify sender is a participant
-    const participant = await prisma.conversationParticipant.findUnique({
-      where: {
-        userId_conversationId: {
-          userId,
-          conversationId,
-        },
-      },
-    });
+    // Verify sender is a participant (not soft-deleted)
+    const { data: participant, error: partError } = await supabase
+      .from("conversation_participants")
+      .select("user_id")
+      .eq("conversation_id", conversationId)
+      .eq("user_id", user.id)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (partError) throw partError;
 
     if (!participant) {
       return NextResponse.json(
@@ -48,39 +49,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const message = await prisma.message.create({
-      data: {
+    // Insert the message
+    const { data: message, error: msgError } = await supabase
+      .from("messages")
+      .insert({
         content: content.trim(),
-        conversationId,
-        senderId: userId,
-      },
-      include: {
-        sender: {
-          select: {
-            id: true,
-            username: true,
-            avatarUrl: true,
-          },
-        },
-      },
-    });
+        conversation_id: conversationId,
+        sender_id: user.id,
+        type: "text",
+      })
+      .select("*")
+      .single();
 
-    // Update conversation's updatedAt timestamp
-    await prisma.conversation.update({
-      where: { id: conversationId },
-      data: { updatedAt: new Date() },
-    });
+    if (msgError) throw msgError;
+
+    // The DB trigger bump_conversation_timestamp() handles updating
+    // updated_at and last_message_at on the conversations table.
+
+    // Fetch the sender profile
+    const { data: senderProfile } = await supabase
+      .from("user_profiles")
+      .select("user_id, username, avatar_url")
+      .eq("user_id", user.id)
+      .single();
 
     return NextResponse.json(
       {
         message: {
           id: message.id,
           content: message.content,
-          senderId: message.senderId,
-          sender: message.sender,
-          conversationId: message.conversationId,
-          readAt: message.readAt,
-          createdAt: message.createdAt,
+          senderId: message.sender_id,
+          sender: senderProfile
+            ? {
+                id: senderProfile.user_id,
+                username: senderProfile.username,
+                avatarUrl: senderProfile.avatar_url,
+              }
+            : null,
+          type: message.type,
+          conversationId: message.conversation_id,
+          createdAt: message.created_at,
         },
       },
       { status: 201 }

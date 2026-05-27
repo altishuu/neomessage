@@ -1,99 +1,144 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getUserIdFromToken } from "@/lib/auth";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const token = request.cookies.get("token")?.value;
-  if (!token) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  try {
+    const supabase = await createSupabaseServerClient();
 
-  const userId = getUserIdFromToken(token);
-  if (!userId) {
-    return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-  }
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-  const { id } = await params;
+    if (authError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  // Verify user is a participant
-  const participant = await prisma.conversationParticipant.findUnique({
-    where: {
-      userId_conversationId: {
-        userId,
-        conversationId: id,
-      },
-    },
-  });
+    const { id } = await params;
 
-  if (!participant) {
-    return NextResponse.json(
-      { error: "Conversation not found or access denied" },
-      { status: 404 }
+    // Verify user is a participant (not soft-deleted)
+    const { data: participant, error: partError } = await supabase
+      .from("conversation_participants")
+      .select("user_id")
+      .eq("conversation_id", id)
+      .eq("user_id", user.id)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (partError) throw partError;
+
+    if (!participant) {
+      return NextResponse.json(
+        { error: "Conversation not found or access denied" },
+        { status: 404 }
+      );
+    }
+
+    // Fetch the conversation
+    const { data: conversation, error: convError } = await supabase
+      .from("conversations")
+      .select("*")
+      .eq("id", id)
+      .is("deleted_at", null)
+      .single();
+
+    if (convError || !conversation) {
+      return NextResponse.json(
+        { error: "Conversation not found" },
+        { status: 404 }
+      );
+    }
+
+    // Fetch participants
+    const { data: participants, error: allPartError } = await supabase
+      .from("conversation_participants")
+      .select("user_id")
+      .eq("conversation_id", id)
+      .is("deleted_at", null);
+
+    if (allPartError) throw allPartError;
+
+    const userIds = (participants ?? []).map((p) => p.user_id);
+
+    // Fetch user profiles for participants
+    const { data: profiles } = await supabase
+      .from("user_profiles")
+      .select("user_id, username, display_name, avatar_url")
+      .in("user_id", userIds);
+
+    const profileMap = new Map(
+      (profiles ?? []).map((p) => [p.user_id, p])
     );
-  }
 
-  const conversation = await prisma.conversation.findUnique({
-    where: { id },
-    include: {
-      participants: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              username: true,
-              email: true,
-              avatarUrl: true,
-            },
-          },
-        },
-      },
-      messages: {
-        orderBy: { createdAt: "desc" },
-        take: 50,
-        include: {
-          sender: {
-            select: {
-              id: true,
-              username: true,
-              avatarUrl: true,
-            },
-          },
-        },
-      },
-    },
-  });
+    // Fetch recent messages (last 50)
+    const { data: messages, error: msgError } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("conversation_id", id)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(50);
 
-  if (!conversation) {
-    return NextResponse.json(
-      { error: "Conversation not found" },
-      { status: 404 }
+    if (msgError) throw msgError;
+
+    // Fetch sender profiles for messages
+    const senderIds = [
+      ...new Set((messages ?? []).map((m) => m.sender_id).filter(Boolean)),
+    ];
+    const { data: senderProfiles } = await supabase
+      .from("user_profiles")
+      .select("user_id, username, avatar_url")
+      .in("user_id", senderIds);
+
+    const senderProfileMap = new Map(
+      (senderProfiles ?? []).map((p) => [p.user_id, p])
     );
-  }
 
-  return NextResponse.json({
-    conversation: {
-      id: conversation.id,
-      title: conversation.title,
-      createdAt: conversation.createdAt,
-      updatedAt: conversation.updatedAt,
-      participants: conversation.participants.map((p) => ({
-        id: p.user.id,
-        username: p.user.username,
-        email: p.user.email,
-        avatarUrl: p.user.avatarUrl,
-      })),
-      messages: conversation.messages.map((m) => ({
-        id: m.id,
-        content: m.content,
-        senderId: m.senderId,
-        sender: m.sender,
-        conversationId: m.conversationId,
-        readAt: m.readAt,
-        createdAt: m.createdAt,
-      })),
-    },
-  });
+    return NextResponse.json({
+      conversation: {
+        id: conversation.id,
+        title: conversation.title,
+        isGroup: conversation.is_group,
+        createdAt: conversation.created_at,
+        updatedAt: conversation.updated_at,
+        lastMessageAt: conversation.last_message_at,
+        participants: userIds.map((uid) => {
+          const prof = profileMap.get(uid);
+          return {
+            id: uid,
+            username: prof?.username ?? "unknown",
+            email: null,
+            displayName: prof?.display_name ?? prof?.username ?? "Unknown",
+            avatarUrl: prof?.avatar_url ?? null,
+          };
+        }),
+        messages: (messages ?? []).reverse().map((m) => {
+          const sender = m.sender_id
+            ? senderProfileMap.get(m.sender_id) ?? null
+            : null;
+          return {
+            id: m.id,
+            content: m.content,
+            senderId: m.sender_id,
+            sender: sender
+              ? {
+                  id: sender.user_id,
+                  username: sender.username,
+                  avatarUrl: sender.avatar_url,
+                }
+              : null,
+            type: m.type,
+            conversationId: m.conversation_id,
+            createdAt: m.created_at,
+          };
+        }),
+      },
+    });
+  } catch (error) {
+    console.error("Get conversation error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
 }

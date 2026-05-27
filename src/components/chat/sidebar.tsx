@@ -8,6 +8,7 @@ import type { Conversation } from "@/lib/types";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { NewConversationModal } from "@/components/chat/new-conversation-modal";
+import { AvatarDropdown } from "@/components/chat/avatar-dropdown";
 
 export function Sidebar() {
   const router = useRouter();
@@ -52,7 +53,7 @@ export function Sidebar() {
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-green animate-pulse" />
+            <AvatarDropdown />
             <h1 className="font-mono text-sm font-bold text-cyan tracking-wider uppercase">
               NeoMessage
             </h1>

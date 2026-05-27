@@ -8,8 +8,25 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { getCurrentUser } from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
 import type { User } from "@/lib/types";
+
+/** Map a Supabase user to our app's User type. */
+function mapUser(
+  supabaseUser: import("@supabase/supabase-js").User
+): User {
+  const username =
+    (supabaseUser.user_metadata?.username as string) ?? "";
+  return {
+    id: supabaseUser.id,
+    email: supabaseUser.email ?? "",
+    username,
+    displayName:
+      (supabaseUser.user_metadata?.display_name as string) ?? username,
+    avatarUrl:
+      (supabaseUser.user_metadata?.avatar_url as string | null) ?? null,
+  };
+}
 
 interface AuthContextValue {
   user: User | null;
@@ -33,11 +50,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
     try {
-      setLoading(true);
-      setError(null);
-      const { user: currentUser } = await getCurrentUser();
-      setUser(currentUser);
+      const supabase = createClient();
+      const {
+        data: { user: supabaseUser },
+        error: getUserError,
+      } = await supabase.auth.getUser();
+
+      if (getUserError) throw getUserError;
+      setUser(supabaseUser ? mapUser(supabaseUser) : null);
     } catch (err) {
       setUser(null);
       setError(
@@ -49,8 +73,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    const supabase = createClient();
+    let mounted = true;
+
+    // Fetch initial user
+    supabase.auth.getUser().then(({ data, error: getUserError }) => {
+      if (!mounted) return;
+      if (getUserError) {
+        setError(getUserError.message);
+      } else if (data.user) {
+        setUser(mapUser(data.user));
+      }
+      setLoading(false);
+    });
+
+    // Listen for auth state changes (login / logout / token refresh)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      if (session?.user) {
+        setUser(mapUser(session.user));
+      } else {
+        setUser(null);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, loading, error, refresh, setUser }}>

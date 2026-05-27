@@ -2,11 +2,69 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { Message } from "@/lib/types";
+import { createClient } from "@/lib/supabase/client";
 
 interface UseRealtimeMessagesOptions {
   conversationId: string;
   onMessage?: (message: Message) => void;
 }
+
+// ── Sender profile cache ──────────────────────────────────────────────
+// Module-level cache persists across re-renders and conversation switches,
+// avoiding redundant supabase queries for user profiles we've already seen.
+interface SenderProfile {
+  id: string;
+  username: string;
+  avatarUrl: string | null;
+}
+
+const senderCache = new Map<string, SenderProfile>();
+
+async function resolveSender(
+  senderId: string | null
+): Promise<SenderProfile> {
+  // System messages have no sender
+  if (!senderId) {
+    return { id: "", username: "system", avatarUrl: null };
+  }
+
+  // Cache hit
+  const cached = senderCache.get(senderId);
+  if (cached) return cached;
+
+  // Fetch from supabase
+  try {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("user_profiles")
+      .select("user_id, username, avatar_url")
+      .eq("user_id", senderId)
+      .single();
+
+    if (!error && data) {
+      const profile: SenderProfile = {
+        id: data.user_id,
+        username: data.username,
+        avatarUrl: data.avatar_url,
+      };
+      senderCache.set(senderId, profile);
+      return profile;
+    }
+  } catch {
+    // Fall through to fallback
+  }
+
+  // Fallback — show minimal info instead of crashing
+  const fallback: SenderProfile = {
+    id: senderId,
+    username: "unknown",
+    avatarUrl: null,
+  };
+  senderCache.set(senderId, fallback);
+  return fallback;
+}
+
+// ── Hook ──────────────────────────────────────────────────────────────
 
 export function useRealtimeMessages({
   conversationId,
@@ -15,80 +73,15 @@ export function useRealtimeMessages({
   const [messages, setMessages] = useState<Message[]>([]);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  );
   const mountedRef = useRef(true);
+  const onMessageRef = useRef(onMessage);
 
-  const connect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
-
-    const es = new EventSource("/api/sse", { withCredentials: true });
-
-    es.onopen = () => {
-      if (mountedRef.current) {
-        setConnected(true);
-        setError(null);
-      }
-    };
-
-    es.addEventListener("connected", () => {
-      if (mountedRef.current) setConnected(true);
-    });
-
-    es.onmessage = (event) => {
-      try {
-        const parsed = JSON.parse(event.data);
-        if (
-          parsed.type === "new_message" &&
-          parsed.data?.conversationId === conversationId
-        ) {
-          const msg = parsed.data as Message;
-          if (mountedRef.current) {
-            setMessages((prev) => {
-              if (prev.some((m) => m.id === msg.id)) return prev;
-              return [...prev, msg];
-            });
-            onMessage?.(msg);
-          }
-        }
-      } catch {
-        // Ignore parse errors
-      }
-    };
-
-    es.onerror = () => {
-      if (mountedRef.current) {
-        setConnected(false);
-        setError("Connection lost, reconnecting...");
-        es.close();
-        reconnectTimeoutRef.current = setTimeout(() => {
-          if (mountedRef.current) connect();
-        }, 3000);
-      }
-    };
-
-    eventSourceRef.current = es;
-  }, [conversationId, onMessage]);
-
+  // Keep callback ref fresh without re-triggering the effect
   useEffect(() => {
-    mountedRef.current = true;
-    connect();
+    onMessageRef.current = onMessage;
+  }, [onMessage]);
 
-    return () => {
-      mountedRef.current = false;
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-    };
-  }, [connect]);
+  // ── Public API ────────────────────────────────────────────────────
 
   const addMessage = useCallback((message: Message) => {
     setMessages((prev) => {
@@ -100,6 +93,76 @@ export function useRealtimeMessages({
   const setInitialMessages = useCallback((msgs: Message[]) => {
     setMessages(msgs);
   }, []);
+
+  // ── Subscription ──────────────────────────────────────────────────
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    const supabase = createClient();
+    const channelName = `conversation:${conversationId}`;
+
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        async (payload) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const record = payload.new as any;
+          if (!mountedRef.current) return;
+
+          const sender = await resolveSender(record.sender_id ?? null);
+
+          const msg: Message = {
+            id: record.id,
+            content: record.content,
+            senderId: record.sender_id ?? "",
+            sender,
+            conversationId: record.conversation_id,
+            readAt: null,
+            createdAt: record.created_at,
+          };
+
+          if (mountedRef.current) {
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === msg.id)) return prev;
+              return [...prev, msg];
+            });
+            onMessageRef.current?.(msg);
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (!mountedRef.current) return;
+
+        switch (status) {
+          case "SUBSCRIBED":
+            setConnected(true);
+            setError(null);
+            break;
+          case "CHANNEL_ERROR":
+          case "TIMED_OUT":
+            setConnected(false);
+            setError("Connection lost, reconnecting...");
+            break;
+          case "CLOSED":
+            setConnected(false);
+            break;
+        }
+      });
+
+    // ── Cleanup ───────────────────────────────────────────────────
+    return () => {
+      mountedRef.current = false;
+      supabase.removeChannel(channel);
+    };
+  }, [conversationId]);
 
   return {
     messages,

@@ -1,34 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getUserIdFromToken } from "@/lib/auth";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { Database } from "@/lib/supabase/types";
 
-export async function GET(request: NextRequest) {
-  const token = request.cookies.get("token")?.value;
+export async function GET(_request: NextRequest) {
+  try {
+    const supabase = await createSupabaseServerClient();
 
-  if (!token) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Fetch the user's profile
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("id, user_id, username, display_name, avatar_url, created_at")
+      .eq("user_id", user.id)
+      .single();
+
+    return NextResponse.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        username: profile?.username ?? "",
+        displayName: profile?.display_name ?? "",
+        avatarUrl: profile?.avatar_url ?? null,
+        createdAt: profile?.created_at ?? user.created_at,
+      },
+    });
+  } catch (error) {
+    console.error("Auth me error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-
-  const userId = getUserIdFromToken(token);
-
-  if (!userId) {
-    return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      email: true,
-      username: true,
-      avatarUrl: true,
-      createdAt: true,
-    },
-  });
-
-  if (!user) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
-  }
-
-  return NextResponse.json({ user });
 }

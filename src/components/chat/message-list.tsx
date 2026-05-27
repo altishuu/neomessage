@@ -84,7 +84,7 @@ export function MessageList({ messages, loading }: MessageListProps) {
                     isMine ? "text-magenta" : "text-cyan"
                   )}
                 >
-                  {isMine ? "~$ you" : `~$ ${msg.sender.username}`}
+                  {isMine ? "~$ you" : `~$ ${msg.sender?.username ?? "system"}`}
                 </span>
                 <span className="font-mono text-[9px] text-text-muted">
                   {format(new Date(msg.createdAt), "HH:mm")}

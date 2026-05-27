@@ -1,36 +1,86 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# NeoMessage
+
+A fast, reliable, secure web messenger — built with Next.js 16, Supabase, and Tailwind CSS.
+
+Real-time messaging with per-conversation subscriptions, online presence indicators, and Row-Level Security baked in at the database layer.
+
+## Tech Stack
+
+| Layer | Choice |
+|-------|--------|
+| **Framework** | Next.js 16 (App Router) |
+| **Auth** | Supabase Auth (email/password + OAuth) |
+| **Database** | Supabase PostgreSQL 15+ |
+| **Real-time** | Supabase Realtime (WAL-based broadcast) |
+| **Styling** | Tailwind CSS v4 |
+| **Language** | TypeScript (strict) |
+| **Validation** | Zod |
+| **Fonts** | Inter (UI) + JetBrains Mono (timestamps, code) |
+
+## Features
+
+- **Auth** — Sign up, login, logout, session management via `@supabase/ssr` HTTP-only cookies
+- **Conversations** — 1-on-1 and group chats with participant management
+- **Real-time messaging** — Messages delivered via Supabase Realtime subscriptions (~50ms latency)
+- **Online presence** — Realtime Presence tracking per user
+- **Soft deletes** — Messages and conversations soft-deleted (audit-friendly)
+- **Row-Level Security** — Every table locked down via RLS policies tied to `auth.uid()`
+
+## Architecture
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full plan: data model, component tree, data flow diagrams, RLS strategy, and build order.
+
+## Schema
+
+The Supabase schema (DDL, RLS policies, triggers, Realtime config) is documented in [docs/supabase-schema.md](docs/supabase-schema.md).
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+# Install dependencies
+npm install
+
+# Copy environment variables
+cp .env.example .env.local
+
+# Edit .env.local with your Supabase project credentials
+
+# Run the dev server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) with your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Project Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+src/
+├── app/              # App Router routes
+│   ├── (auth)/       # Login, register
+│   └── (chat)/       # Main chat UI
+├── components/       # React components
+│   ├── ui/           # Primitives (button, input, avatar, etc.)
+│   ├── auth/         # Auth forms
+│   ├── chat/         # Conversation list, message bubbles, input
+│   └── presence/     # Online presence indicators
+├── lib/
+│   ├── supabase/     # Client, server, middleware, admin helpers
+│   ├── queries/      # Data fetching (conversations, messages, users)
+│   ├── actions/      # Server Actions (auth, messages, conversations)
+│   ├── hooks/        # React hooks (real-time subscriptions)
+│   └── utils/        # cn(), format-date, validators
+├── providers/        # React context (Supabase, user, real-time)
+└── middleware.ts     # Auth redirect middleware
+```
 
-## Learn More
+## Env Vars
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL (public) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anon/public key |
+| `SUPABASE_SERVICE_ROLE_KEY` | No | Service role key (admin ops, storage) |
 
 ## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The easiest way to deploy is the [Vercel Platform](https://vercel.com/new). Set the environment variables above in your Vercel project settings.

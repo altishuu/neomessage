@@ -1,0 +1,481 @@
+-- ============================================================================
+-- NeoMessage — Initial Schema Migration
+-- Target: Supabase (PostgreSQL 15+)
+-- Date:   2026-05-27
+-- ============================================================================
+-- This migration defines the core schema for NeoMessage: user profiles,
+-- conversations, conversation participants, and messages. It includes RLS
+-- policies, trigger functions, storage configuration, and Realtime setup.
+--
+-- Run order (each section is idempotent where possible):
+--   A. Extensions & Enums
+--   B. Core tables + indexes
+--   C. Row-Level Security (enable + policies)
+--   D. Triggers & Functions
+--   E. Storage bucket + RLS policies
+--   F. Realtime publication
+-- ============================================================================
+
+-- ============================================================================
+-- Section A: Extensions & Enums
+-- ============================================================================
+
+-- pgcrypto for gen_random_uuid() (usually already enabled in Supabase)
+create extension if not exists "pgcrypto" with schema extensions;
+
+-- Message type enum: extensible for future types (video, voice, poll)
+do $$ begin
+  create type public.message_type as enum (
+    'text',
+    'system',  -- system event (user joined, left, title changed)
+    'image',
+    'file'
+  );
+exception
+  when duplicate_object then null;
+end $$;
+
+
+-- ============================================================================
+-- Section B: Core Tables + Indexes
+-- ============================================================================
+
+-- ── B1. user_profiles ─────────────────────────────────────────────────────
+
+create table public.user_profiles (
+  id           uuid        primary key default gen_random_uuid(),
+  user_id      uuid        not null unique references auth.users(id)
+                           on delete cascade,
+  username     text        not null unique,
+  display_name text        not null,
+  avatar_url   text,                    -- Supabase Storage URL (avatars/{user_id}/...)
+  created_at   timestamptz not null default now(),
+
+  constraint username_length
+    check (char_length(username) >= 3 and char_length(username) <= 30),
+  constraint username_format
+    check (username ~ '^[a-zA-Z0-9_]+$')
+);
+
+comment on table public.user_profiles is
+  'Maps auth.users to public profile data. One-to-one with auth.users.';
+
+-- Most common fetch: lookup by auth UID on every authenticated request
+create index if not exists idx_user_profiles_user_id
+  on public.user_profiles (user_id);
+
+-- Username lookup for search / mention autocomplete
+create index if not exists idx_user_profiles_username
+  on public.user_profiles (username);
+
+
+-- ── B2. conversations ─────────────────────────────────────────────────────
+
+create table public.conversations (
+  id              uuid        primary key default gen_random_uuid(),
+  title           text,                    -- null for 1-on-1 (UI derives name)
+  is_group        boolean     not null default false,
+  created_by      uuid        references public.user_profiles(user_id)
+                              on delete set null,
+  last_message_at timestamptz,             -- denormalized; see trigger §D2
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  deleted_at      timestamptz              -- soft-delete
+);
+
+comment on table public.conversations is
+  'A chat conversation (DM or group). Soft-deletable.';
+
+-- Sort recent conversations for the sidebar
+create index if not exists idx_conversations_recent
+  on public.conversations (last_message_at desc nulls last)
+  where deleted_at is null;
+
+-- Find conversations created by a specific user
+create index if not exists idx_conversations_created_by
+  on public.conversations (created_by);
+
+
+-- ── B3. conversation_participants ─────────────────────────────────────────
+
+create table public.conversation_participants (
+  id              uuid        primary key default gen_random_uuid(),
+  conversation_id uuid        not null references public.conversations(id)
+                              on delete cascade,
+  user_id         uuid        not null references public.user_profiles(user_id)
+                              on delete cascade,
+  joined_at       timestamptz not null default now(),
+  last_read_at    timestamptz,             -- for unread badge tracking
+  deleted_at      timestamptz,             -- per-user "hide conversation"
+
+  constraint unique_participant
+    unique (conversation_id, user_id)
+);
+
+comment on table public.conversation_participants is
+  'Many-to-many: which users are in which conversations. Per-user soft-delete.';
+
+-- Find all conversations for a user (the primary sidebar query)
+create index if not exists idx_participants_user
+  on public.conversation_participants (user_id)
+  where deleted_at is null;
+
+-- Find a specific user's read state in a conversation (for unread count)
+create index if not exists idx_participants_conversation_user
+  on public.conversation_participants (conversation_id, user_id);
+
+-- Find all participants of a conversation (for message delivery)
+create index if not exists idx_participants_conversation
+  on public.conversation_participants (conversation_id);
+
+
+-- ── B4. messages ──────────────────────────────────────────────────────────
+
+create table public.messages (
+  id              uuid               primary key default gen_random_uuid(),
+  conversation_id uuid               not null references public.conversations(id)
+                                      on delete cascade,
+  sender_id       uuid               references public.user_profiles(user_id)
+                                      on delete set null,   -- nullable for system messages
+  type            public.message_type not null default 'text',
+  content         text               not null,
+  metadata        jsonb,                    -- flexible: image dims, file refs, mentions
+  created_at      timestamptz        not null default now(),
+  updated_at      timestamptz,              -- set if message is edited
+  deleted_at      timestamptz               -- soft-delete
+);
+
+comment on table public.messages is
+  'Messages within a conversation. Soft-deletable. Message types extensible via enum.';
+
+-- 1. Paginate messages in a conversation (most common query)
+create index if not exists idx_messages_conversation_created
+  on public.messages (conversation_id, created_at desc);
+
+-- 2. Active messages only (no soft-deletes) for real-time subscriptions
+create index if not exists idx_messages_active
+  on public.messages (conversation_id, created_at desc)
+  where deleted_at is null;
+
+-- 3. Find messages by sender (user's sent messages, profile history)
+create index if not exists idx_messages_sender
+  on public.messages (sender_id, created_at desc)
+  where sender_id is not null;
+
+-- 4. Optional BRIN index for very large message tables (uncomment when needed):
+-- create index if not exists idx_messages_created_brin
+--   on public.messages using brin (created_at)
+--   with (pages_per_range = 32);
+
+
+-- ============================================================================
+-- Section C: Row-Level Security
+-- ============================================================================
+
+-- ── C1. Enable RLS on all tables ─────────────────────────────────────────
+
+alter table public.user_profiles             enable row level security;
+alter table public.conversations             enable row level security;
+alter table public.conversation_participants enable row level security;
+alter table public.messages                  enable row level security;
+
+
+-- ── C2. user_profiles policies ────────────────────────────────────────────
+
+-- Anyone (even unauthenticated) can read profiles — needed for avatar rendering
+create policy "Profiles are publicly readable"
+  on public.user_profiles for select
+  using (true);
+
+-- Users can only update their own profile
+create policy "Users can update own profile"
+  on public.user_profiles for update
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+-- Safety net: insert is handled by handle_new_user() trigger, but this
+-- allows direct insert for testing and edge cases
+create policy "Insert happens on signup (trigger)"
+  on public.user_profiles for insert
+  with check (user_id = auth.uid());
+
+
+-- ── C3. conversations policies ────────────────────────────────────────────
+
+-- Participants can view conversations they belong to (excluding soft-deleted)
+create policy "Participants can view conversations"
+  on public.conversations for select
+  using (
+    exists (
+      select 1 from public.conversation_participants
+      where conversation_id = id
+        and user_id = auth.uid()
+        and deleted_at is null
+    )
+  );
+
+-- Participants can update conversation metadata (title, etc.)
+create policy "Participants can update conversation metadata"
+  on public.conversations for update
+  using (
+    exists (
+      select 1 from public.conversation_participants
+      where conversation_id = id
+        and user_id = auth.uid()
+        and deleted_at is null
+    )
+  );
+
+-- Any authenticated user can create a new conversation
+create policy "Authenticated users can create conversations"
+  on public.conversations for insert
+  with check (true);
+
+-- Soft-delete (delete) allowed for participants
+create policy "Participants can soft-delete conversations"
+  on public.conversations for update
+  using (
+    exists (
+      select 1 from public.conversation_participants
+      where conversation_id = id
+        and user_id = auth.uid()
+        and deleted_at is null
+    )
+  );
+
+
+-- ── C4. conversation_participants policies ────────────────────────────────
+
+-- Users can see their own membership, plus other members in conversations
+-- they're part of (needed to render participant lists)
+create policy "Participants can view who else is in their conversations"
+  on public.conversation_participants for select
+  using (
+    user_id = auth.uid()
+    or exists (
+      select 1 from public.conversation_participants cp
+      where cp.conversation_id = conversation_id
+        and cp.user_id = auth.uid()
+        and cp.deleted_at is null
+    )
+  );
+
+-- Existing participants can invite others; users can add themselves (DM flow)
+create policy "Participants can invite others to group conversations"
+  on public.conversation_participants for insert
+  with check (
+    exists (
+      select 1 from public.conversation_participants
+      where conversation_id = conversation_id
+        and user_id = auth.uid()
+    )
+    or auth.uid() = user_id
+  );
+
+-- Users can remove themselves (set deleted_at) or update last_read_at
+create policy "Participants can update own membership"
+  on public.conversation_participants for update
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+
+-- ── C5. messages policies ─────────────────────────────────────────────────
+
+-- Only participants can read messages in a conversation
+create policy "Participants can read messages"
+  on public.messages for select
+  using (
+    exists (
+      select 1 from public.conversation_participants
+      where conversation_id = messages.conversation_id
+        and user_id = auth.uid()
+        and deleted_at is null
+    )
+  );
+
+-- Participants can insert messages (their own, or system messages via trigger)
+create policy "Participants can insert messages"
+  on public.messages for insert
+  with check (
+    exists (
+      select 1 from public.conversation_participants
+      where conversation_id = messages.conversation_id
+        and user_id = auth.uid()
+        and deleted_at is null
+    )
+    and (sender_id = auth.uid() or type = 'system')
+  );
+
+-- Sender can edit own message (sets updated_at)
+create policy "Sender can edit own message"
+  on public.messages for update
+  using (sender_id = auth.uid() and deleted_at is null)
+  with check (sender_id = auth.uid() and updated_at is not null);
+
+-- Sender can soft-delete own message (sets deleted_at)
+create policy "Sender can soft-delete own message"
+  on public.messages for update
+  using (sender_id = auth.uid())
+  with check (sender_id = auth.uid() and deleted_at is not null);
+
+
+-- ============================================================================
+-- Section D: Triggers & Functions
+-- ============================================================================
+
+-- ── D1. Auto-create profile on signup ─────────────────────────────────────
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  base_username text;
+  final_username text;
+  counter int := 0;
+begin
+  -- Derive base username from email prefix, sanitising non-alphanumeric chars
+  base_username := regexp_replace(
+    split_part(new.email, '@', 1),
+    '[^a-zA-Z0-9_]', '_', 'g'
+  );
+
+  -- Truncate to fit within the 30-char max (leaving room for _N suffix)
+  base_username := left(base_username, 25);
+
+  -- Collision-safe retry loop: try base, then base_1, base_2, ..., base_100
+  loop
+    final_username := case when counter = 0 then base_username
+                           else base_username || '_' || counter::text end;
+    begin
+      insert into public.user_profiles (user_id, username, display_name)
+      values (
+        new.id,
+        final_username,
+        coalesce(nullif(split_part(new.email, '@', 1), ''), 'New User')
+      );
+      return new;
+    exception when unique_violation then
+      counter := counter + 1;
+      if counter > 100 then
+        -- Last-resort fallback: use a UUID fragment
+        final_username := 'user_' || substr(new.id::text, 1, 8);
+        insert into public.user_profiles (user_id, username, display_name)
+        values (new.id, final_username, 'New User');
+        return new;
+      end if;
+    end;
+  end loop;
+end;
+$$;
+
+comment on function public.handle_new_user() is
+  'Trigger function: creates a user_profiles row when a new auth.users row is inserted. Includes collision-safe username generation.';
+
+-- Trigger on auth.users INSERT
+--
+-- NOTE: If this trigger fails with "permission denied for schema auth",
+-- use Supabase Dashboard → Authentication → Hooks instead:
+--   Add a Post-registration hook pointing to public.handle_new_user().
+-- This replaces the raw trigger approach.
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row
+  execute function public.handle_new_user();
+
+
+-- ── D2. Bump conversation timestamps on new message ───────────────────────
+
+create or replace function public.bump_conversation_timestamp()
+returns trigger
+language plpgsql
+security definer
+as $$
+begin
+  update public.conversations
+  set
+    updated_at = now(),
+    last_message_at = new.created_at
+  where id = new.conversation_id;
+  return new;
+end;
+$$;
+
+comment on function public.bump_conversation_timestamp() is
+  'Trigger function: updates conversations.updated_at and last_message_at on message insert.';
+
+create trigger on_message_inserted
+  after insert on public.messages
+  for each row
+  execute function public.bump_conversation_timestamp();
+
+
+-- ============================================================================
+-- Section E: Storage (avatars bucket)
+-- ============================================================================
+
+-- Create the avatars storage bucket (if it doesn't already exist)
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'avatars',
+  'avatars',
+  false,            -- private bucket; serve via signed URLs or getPublicUrl()
+  5242880,          -- 5 MB limit
+  array['image/png', 'image/jpeg', 'image/webp', 'image/gif']::text[]
+)
+on conflict (id) do nothing;
+
+comment on table storage.objects is
+  'Avatar storage: path convention avatars/{user_id}/{filename}. Private bucket with per-user RLS.';
+
+-- RLS on storage.objects for avatars bucket
+-- (Only add policies if the bucket was newly created or policies don't exist)
+
+-- Anyone can read avatars (needed to render message sender avatars)
+create policy "Anyone can read avatars"
+  on storage.objects for select
+  using ( bucket_id = 'avatars' );
+
+-- Users can only upload to their own directory
+create policy "Users can upload own avatar"
+  on storage.objects for insert
+  with check (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+-- Users can only update/delete their own avatar
+create policy "Users can manage own avatar"
+  on storage.objects for update
+  using (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  )
+  with check (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy "Users can delete own avatar"
+  on storage.objects for delete
+  using (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+
+-- ============================================================================
+-- Section F: Realtime Configuration
+-- ============================================================================
+
+-- Add tables to the supabase_realtime publication for live subscriptions
+-- Note: Do NOT add user_profiles or conversation_participants unless
+-- real-time profile/participant updates are needed — keeps WAL overhead low.
+alter publication supabase_realtime add table public.messages;
+alter publication supabase_realtime add table public.conversations;
+
+-- REPLICA IDENTITY FULL ensures Realtime sends the full row on UPDATE/DELETE.
+-- Acceptable for messages (mostly INSERT, occasional UPDATE) and conversations.
+alter table public.messages      replica identity full;
+alter table public.conversations replica identity full;

@@ -3,10 +3,23 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { login } from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth-context";
+import type { User } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+
+function mapUser(
+  supabaseUser: import("@supabase/supabase-js").User
+): User {
+  return {
+    id: supabaseUser.id,
+    email: supabaseUser.email ?? "",
+    username: (supabaseUser.user_metadata?.username as string) ?? "",
+    avatarUrl:
+      (supabaseUser.user_metadata?.avatar_url as string | null) ?? null,
+  };
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,8 +35,15 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const { user } = await login(email, password);
-      setUser(user);
+      const supabase = createClient();
+      const { data, error: signInError } =
+        await supabase.auth.signInWithPassword({ email, password });
+
+      if (signInError) throw signInError;
+
+      if (data.user) {
+        setUser(mapUser(data.user));
+      }
       router.push("/chat");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
