@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+/* ========== Terminal-Cyber Palette ========== */
+@theme inline {
+  --color-surface: #0a0a0f;
+  --color-surface-raised: #12121a;
+  --color-surface-overlay: #181825;
+  --color-border: #2a2a3a;
+  --color-border-focus: #00e5ff;
+  --color-text: #c0caf5;
+  --color-text-dim: #565f89;
+  --color-text-muted: #3b3b52;
+  --color-cyan: #00e5ff;
+  --color-magenta: #ff6bcb;
+  --color-green: #00ff9d;
+  --color-amber: #ffb000;
+  --color-red: #ff5370;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* ========== Base ========== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ========== Scrollbar ========== */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2a3a;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3b3b52;
+}
+
+/* ========== Selection ========== */
+::selection {
+  background: rgba(0, 229, 255, 0.2);
+  color: #c0caf5;
+}
