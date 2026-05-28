@@ -79,14 +79,18 @@ export async function GET(
       .select("*")
       .eq("conversation_id", id)
       .is("deleted_at", null)
-      .order("created_at", { ascending: false })
+      .order("created_at", { ascending: true })
       .limit(50);
 
     if (msgError) throw msgError;
 
     // Fetch sender profiles for messages
     const senderIds = [
-      ...new Set((messages ?? []).map((m) => m.sender_id).filter(Boolean)),
+      ...new Set(
+        (messages ?? [])
+          .map((m) => m.sender_id)
+          .filter((id): id is string => id !== null),
+      ),
     ];
     const { data: senderProfiles } = await supabase
       .from("user_profiles")
@@ -115,7 +119,7 @@ export async function GET(
             avatarUrl: prof?.avatar_url ?? null,
           };
         }),
-        messages: (messages ?? []).reverse().map((m) => {
+        messages: (messages ?? []).map((m) => {
           const sender = m.sender_id
             ? senderProfileMap.get(m.sender_id) ?? null
             : null;
