@@ -217,17 +217,14 @@ export function MessageList({ messages, loading, typingUsers = [], conversationI
                     <div 
                       className="relative group/img cursor-pointer overflow-hidden rounded-sm border border-border"
                       onClick={() => {
-                        // We don't have the signed URL in the message object yet.
-                        // We'll need a way to get it. 
-                        // For this implementation, we assume the metadata contains it or we fetch it.
-                        // Since the upload API returns it, it should be stored or fetched.
-                        // if ((msg as any).metadata?.signedUrl) {
-                        //   setLightboxImage((msg as any).metadata.signedUrl);
-                        // }
+                        const url = (msg as any).metadata?.signedUrl as string | undefined;
+                        if (url) {
+                          setLightboxImage(url);
+                        }
                       }}
                     >
                       <img 
-                        src={(msg as any).metadata?.file_url || ""} 
+                        src={(msg as any).metadata?.signedUrl || (msg as any).metadata?.file_url || ""} 
                         alt={msg.content} 
                         className="max-w-full max-h-64 object-contain bg-black"
                       />
@@ -251,7 +248,7 @@ export function MessageList({ messages, loading, typingUsers = [], conversationI
                         </p>
                       </div>
                       <a 
-                        href={(msg as any).metadata?.file_url || "#"} 
+                        href={(msg as any).metadata?.signedUrl || (msg as any).metadata?.file_url || "#"} 
                         download 
                         className="p-2 hover:bg-surface-overlay rounded-sm transition-colors"
                       >

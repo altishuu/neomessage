@@ -129,10 +129,13 @@ export function useRealtimeMessages({
             content: record.content,
             senderId: record.sender_id ?? "",
             sender,
+            type: record.type ?? undefined,
             conversationId: record.conversation_id,
             readAt: null,
             createdAt: record.created_at,
             updatedAt: record.updated_at,
+            deletedAt: record.deleted_at ?? null,
+            metadata: record.metadata ?? undefined,
           };
 
           if (mountedRef.current) {
