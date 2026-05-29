@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 // ── GET /api/profile/[id] ────────────────────────────────────────────────────
-// Returns a public profile (minimal fields: username, avatar_url, created_at only).
-// Accessible without authentication for avatar rendering and user lookup.
+// Returns a public profile (minimal fields: username, display_name, avatar_url).
+// Accessible without authentication — queries the public_user_profiles view which
+// is RLS-gated at the view level and exposes only public columns by design.
+// See: supabase/migrations/20260527000001_restrict_user_profiles_rls.sql
 
 export async function GET(
   _request: NextRequest,
@@ -21,8 +23,8 @@ export async function GET(
     }
 
     const { data: profile, error } = await supabase
-      .from("user_profiles")
-      .select("username, avatar_url, created_at")
+      .from("public_user_profiles")
+      .select("user_id, username, display_name, avatar_url")
       .eq("user_id", id)
       .maybeSingle();
 
@@ -40,9 +42,10 @@ export async function GET(
 
     return NextResponse.json({
       user: {
+        id: profile.user_id,
         username: profile.username,
+        displayName: profile.display_name,
         avatarUrl: profile.avatar_url ?? null,
-        createdAt: profile.created_at,
       },
     });
   } catch (error) {

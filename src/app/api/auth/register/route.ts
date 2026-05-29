@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createServerClient } from "@supabase/ssr";
+import { createServerSupabaseClient } from "@/lib/supabase/middleware";
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     if (!email || !username || !password) {
       return NextResponse.json(
         { error: "Email, username, and password are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -21,32 +21,33 @@ export async function POST(request: NextRequest) {
     ) {
       return NextResponse.json(
         { error: "Invalid input types" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (username.length < 3 || username.length > 30) {
       return NextResponse.json(
         { error: "Username must be between 3 and 30 characters" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (password.length < 6) {
       return NextResponse.json(
         { error: "Password must be at least 6 characters" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // Check for existing username using an anon client (public reads allowed by RLS)
+    // Check for existing username using an anon client against the public view
+    // (public_user_profiles is accessible to both anon and authenticated roles)
     const anonClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     );
 
     const { data: existingProfile } = await anonClient
-      .from("user_profiles")
+      .from("public_user_profiles")
       .select("username")
       .eq("username", username)
       .maybeSingle();
@@ -54,33 +55,13 @@ export async function POST(request: NextRequest) {
     if (existingProfile) {
       return NextResponse.json(
         { error: "Username already taken" },
-        { status: 409 }
+        { status: 409 },
       );
     }
 
     // Create the auth user via Supabase Auth
-    let supabaseResponse = NextResponse.next({ request });
-
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll();
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value }) =>
-              request.cookies.set(name, value)
-            );
-            supabaseResponse = NextResponse.next({ request });
-            cookiesToSet.forEach(({ name, value, options }) =>
-              supabaseResponse.cookies.set(name, value, options)
-            );
-          },
-        },
-      }
-    );
+    const { supabase, supabaseResponse } =
+      createServerSupabaseClient(request);
 
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -98,26 +79,35 @@ export async function POST(request: NextRequest) {
       if (error.message?.includes("already registered") || error.status === 422) {
         return NextResponse.json(
           { error: "Email already in use" },
-          { status: 409 }
+          { status: 409 },
         );
       }
       console.error("Signup error:", error);
       return NextResponse.json(
         { error: error.message || "Registration failed" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!data.user) {
       return NextResponse.json(
         { error: "Registration failed" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
-    // If the trigger auto-creates a profile, update it with the chosen username.
-    // Otherwise (or as a safety net), upsert the profile ourselves.
-    const { error: upsertError } = await supabase
+    // Use service_role client for the profile upsert to guard against cases where
+    // email confirmation is enabled and no session cookie exists yet.
+    // The trigger should have created a profile, so this is a safety net.
+    const adminClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: { autoRefreshToken: false, persistSession: false },
+      },
+    );
+
+    const { error: upsertError } = await adminClient
       .from("user_profiles")
       .upsert(
         {
@@ -125,7 +115,7 @@ export async function POST(request: NextRequest) {
           username,
           display_name: username,
         },
-        { onConflict: "user_id", ignoreDuplicates: false }
+        { onConflict: "user_id", ignoreDuplicates: false },
       );
 
     if (upsertError) {
@@ -145,7 +135,7 @@ export async function POST(request: NextRequest) {
           createdAt: data.user.created_at,
         },
       },
-      { status: 201 }
+      { status: 201 },
     );
 
     // Propagate auth cookies from the intermediate response when session exists

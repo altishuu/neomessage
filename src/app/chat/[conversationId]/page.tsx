@@ -3,16 +3,20 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getConversation, sendMessage } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { useRealtimeMessages } from "@/lib/hooks/use-realtime-messages";
+import { useTypingPresence } from "@/lib/hooks/use-typing-presence";
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { MessageList } from "@/components/chat/message-list";
-import { MessageInput } from "@/components/chat/message-input";
+import { ChatInputContainer } from "@/components/chat/chat-input-container";
 import type { Conversation } from "@/lib/types";
 
 export default function ConversationPage() {
   const params = useParams();
   const router = useRouter();
   const conversationId = params?.conversationId as string;
+
+  const { user } = useAuth();
 
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [loading, setLoading] = useState(true);
@@ -27,10 +31,17 @@ export default function ConversationPage() {
     addMessage,
   } = useRealtimeMessages({
     conversationId,
-    onMessage: (msg) => {
+    onMessage: () => {
       // Messages already added by the hook
     },
   });
+
+  // ── Typing presence ──────────────────────────────────────────────
+  const {
+    typingUsers,
+    broadcastTyping,
+    stopTyping,
+  } = useTypingPresence(conversationId, user?.id ?? "");
 
   // Fetch conversation data
   useEffect(() => {
@@ -69,11 +80,13 @@ export default function ConversationPage() {
       try {
         const { message } = await sendMessage(conversationId, content);
         addMessage(message);
+        // Stop typing indicator when message is sent
+        stopTyping();
       } catch (err) {
         setSendError(err instanceof Error ? err.message : "Failed to send");
       }
     },
-    [conversationId, addMessage]
+    [conversationId, addMessage, stopTyping]
   );
 
   // Loading state
@@ -111,9 +124,12 @@ export default function ConversationPage() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Header */}
-      <ConversationHeader participants={conversation.participants} />
+      <ConversationHeader
+        participants={conversation.participants}
+        typingUsers={typingUsers}
+      />
 
-      {/* Connection status */}
+      {/* Realtime connection status */}
       {!connected && (
         <div className="px-4 py-1.5 bg-amber/10 border-b border-amber/30">
           <p className="font-mono text-[10px] text-amber text-center">
@@ -122,8 +138,31 @@ export default function ConversationPage() {
         </div>
       )}
 
+      {/* Presence connection status */}
+      {false && (
+        <div className="px-4 py-1 bg-amber/5 border-b border-amber/20">
+          <p className="font-mono text-[9px] text-amber/60 text-center">
+            ~$ typing indicator disconnected
+          </p>
+        </div>
+      )}
+   
+      {/* Presence error */}
+      {false && (
+        <div className="px-4 py-1 bg-red/10 border-b border-red/30">
+          <p className="font-mono text-[9px] text-red/70 text-center">
+            [presence] error
+          </p>
+        </div>
+      )}
+
       {/* Messages */}
-      <MessageList messages={messages} loading={false} />
+      <MessageList
+        messages={messages}
+        loading={false}
+        typingUsers={typingUsers}
+        conversationId={conversationId}
+      />
 
       {/* Send error */}
       {sendError && (
@@ -133,7 +172,16 @@ export default function ConversationPage() {
       )}
 
       {/* Input */}
-      <MessageInput onSend={handleSend} />
+      <ChatInputContainer
+        onSend={handleSend}
+        onTypingChange={(typing) => {
+          if (typing) {
+            broadcastTyping();
+          } else {
+            stopTyping();
+          }
+        }}
+      />
     </div>
   );
 }

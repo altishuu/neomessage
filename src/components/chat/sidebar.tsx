@@ -1,19 +1,50 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { getConversations } from "@/lib/api";
+import { getConversations, togglePin } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 import type { Conversation } from "@/lib/types";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { NewConversationModal } from "@/components/chat/new-conversation-modal";
 import { AvatarDropdown } from "@/components/chat/avatar-dropdown";
 
+function PinIcon({ pinned }: { pinned: boolean }) {
+  return (
+    <svg
+      className={cn(
+        "w-3.5 h-3.5 transition-colors duration-150",
+        pinned
+          ? "text-cyan"
+          : "text-text-muted group-hover/conversation:text-text-dim"
+      )}
+      fill={pinned ? "currentColor" : "none"}
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={pinned ? 0 : 2}
+    >
+      {pinned ? (
+        /* Filled pin (thumbtack) */
+        <path d="M16 12V4h1a1 1 0 000-2H7a1 1 0 000 2h1v8l-2 2v2h5.2v6l.8.8.8-.8v-6H18v-2l-2-2z" />
+      ) : (
+        /* Outline pin (thumbtack) */
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M15 4H9m6 0v8l2 2v2H7v-2l2-2V4m6 0h1a1 1 0 000-2H8a1 1 0 000 2h1"
+        />
+      )}
+    </svg>
+  );
+}
+
 export function Sidebar() {
   const router = useRouter();
   const params = useParams();
   const activeId = params?.conversationId as string | undefined;
+  const { user } = useAuth();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,6 +76,38 @@ export function Sidebar() {
       router.push(`/chat/${conv.id}`);
     },
     [router]
+  );
+
+  // Client-side sort: pinned first, then by lastMessageAt desc
+  const sortedConversations = useMemo(() => {
+    return [...conversations].sort((a, b) => {
+      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+      return (
+        new Date(b.lastMessageAt ?? 0).getTime() -
+        new Date(a.lastMessageAt ?? 0).getTime()
+      );
+    });
+  }, [conversations]);
+
+  const handleTogglePin = useCallback(
+    async (convId: string, currentPinned: boolean) => {
+      // Snapshot for rollback
+      const snapshot = conversations;
+      const newPinned = !currentPinned;
+
+      // Optimistic update
+      setConversations((prev) =>
+        prev.map((c) => (c.id === convId ? { ...c, isPinned: newPinned } : c))
+      );
+
+      try {
+        await togglePin(convId, newPinned);
+      } catch {
+        // Rollback on error
+        setConversations(snapshot);
+      }
+    },
+    [conversations]
   );
 
   return (
@@ -82,7 +145,7 @@ export function Sidebar() {
                 </div>
               ))}
             </div>
-          ) : conversations.length === 0 ? (
+          ) : sortedConversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center px-4">
               <p className="font-mono text-text-dim text-sm mb-4">
                 ~$ no conversations found
@@ -97,8 +160,18 @@ export function Sidebar() {
             </div>
           ) : (
             <div className="py-1">
-              {conversations.map((conv) => {
-                const other = conv.participants[0];
+              {sortedConversations.map((conv) => {
+                // For DMs, show the conversation partner (not the current user).
+                // For groups, show the title (or fall back to participant names).
+                const otherParticipants = user
+                  ? conv.participants.filter((p) => p.id !== user.id)
+                  : conv.participants;
+                const other = conv.isGroup
+                  ? null
+                  : otherParticipants[0];
+                const displayName = conv.title
+                  ? conv.title
+                  : (other?.username ?? otherParticipants[0]?.username ?? "Unknown");
                 const isActive = conv.id === activeId;
                 const lastMsg = conv.lastMessage;
 
@@ -107,13 +180,13 @@ export function Sidebar() {
                     key={conv.id}
                     onClick={() => router.push(`/chat/${conv.id}`)}
                     className={cn(
-                      "w-full flex items-center gap-3 px-4 py-3 text-left transition-colors duration-150",
+                      "group/conversation w-full flex items-center gap-3 px-4 py-3 text-left transition-colors duration-150",
                       "hover:bg-surface-raised border-b border-border/50",
                       isActive && "bg-surface-raised border-l-2 border-l-cyan"
                     )}
                   >
                     <Avatar
-                      username={other?.username ?? "?"}
+                      username={displayName}
                       avatarUrl={other?.avatarUrl}
                       size="md"
                     />
@@ -125,16 +198,32 @@ export function Sidebar() {
                             isActive ? "text-cyan" : "text-text"
                           )}
                         >
-                          {other?.username ?? "Unknown"}
+                          {displayName}
                         </span>
-                        {lastMsg && (
-                          <span className="font-mono text-[10px] text-text-muted flex-shrink-0">
-                            {new Date(lastMsg.createdAt).toLocaleTimeString(
-                              [],
-                              { hour: "2-digit", minute: "2-digit" }
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          {/* Pin toggle — always visible when pinned, on hover when unpinned */}
+                          <span
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleTogglePin(conv.id, conv.isPinned);
+                            }}
+                            className={cn(
+                              "flex items-center justify-center",
+                              !conv.isPinned &&
+                                "opacity-0 group-hover/conversation:opacity-100 transition-opacity"
                             )}
+                          >
+                            <PinIcon pinned={conv.isPinned} />
                           </span>
-                        )}
+                          {lastMsg && (
+                            <span className="font-mono text-[10px] text-text-muted">
+                              {new Date(lastMsg.createdAt).toLocaleTimeString(
+                                [],
+                                { hour: "2-digit", minute: "2-digit" }
+                              )}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       {lastMsg ? (
                         <p className="font-mono text-xs text-text-dim truncate mt-0.5">

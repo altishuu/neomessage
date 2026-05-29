@@ -3,23 +3,9 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth-context";
-import type { User } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-
-function mapUser(
-  supabaseUser: import("@supabase/supabase-js").User
-): User {
-  return {
-    id: supabaseUser.id,
-    email: supabaseUser.email ?? "",
-    username: (supabaseUser.user_metadata?.username as string) ?? "",
-    avatarUrl:
-      (supabaseUser.user_metadata?.avatar_url as string | null) ?? null,
-  };
-}
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -27,6 +13,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -35,20 +22,27 @@ export default function RegisterPage() {
     setError(null);
     setLoading(true);
 
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      setLoading(false);
+      return;
+    }
+
     try {
-      const supabase = createClient();
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { username },
-        },
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, username, password }),
       });
 
-      if (signUpError) throw signUpError;
+      const json = await res.json();
 
-      if (data.user) {
-        setUser(mapUser(data.user));
+      if (!res.ok) {
+        throw new Error(json.error ?? "Registration failed");
+      }
+
+      if (json.user) {
+        setUser(json.user);
       }
       router.push("/chat");
     } catch (err) {
@@ -109,6 +103,20 @@ export default function RegisterPage() {
             required
             minLength={6}
             autoComplete="new-password"
+            showPasswordToggle
+          />
+
+          <Input
+            id="confirmPassword"
+            label="confirm password"
+            type="password"
+            placeholder="••••••••"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+            minLength={6}
+            autoComplete="new-password"
+            showPasswordToggle
           />
 
           {error && (

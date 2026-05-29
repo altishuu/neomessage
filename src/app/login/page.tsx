@@ -3,23 +3,9 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth-context";
-import type { User } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-
-function mapUser(
-  supabaseUser: import("@supabase/supabase-js").User
-): User {
-  return {
-    id: supabaseUser.id,
-    email: supabaseUser.email ?? "",
-    username: (supabaseUser.user_metadata?.username as string) ?? "",
-    avatarUrl:
-      (supabaseUser.user_metadata?.avatar_url as string | null) ?? null,
-  };
-}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,14 +21,20 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const supabase = createClient();
-      const { data, error: signInError } =
-        await supabase.auth.signInWithPassword({ email, password });
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
-      if (signInError) throw signInError;
+      const json = await res.json();
 
-      if (data.user) {
-        setUser(mapUser(data.user));
+      if (!res.ok) {
+        throw new Error(json.error ?? "Login failed");
+      }
+
+      if (json.user) {
+        setUser(json.user);
       }
       router.push("/chat");
     } catch (err) {
@@ -91,6 +83,7 @@ export default function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             required
             autoComplete="current-password"
+            showPasswordToggle
           />
 
           {error && (

@@ -107,7 +107,7 @@ export function useRealtimeMessages({
       .on(
         "postgres_changes",
         {
-          event: "INSERT",
+          event: "*",
           schema: "public",
           table: "messages",
           filter: `conversation_id=eq.${conversationId}`,
@@ -116,6 +116,11 @@ export function useRealtimeMessages({
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const record = payload.new as any;
           if (!mountedRef.current) return;
+
+          if (payload.eventType === 'DELETE') {
+             setMessages((prev) => prev.filter(m => m.id !== payload.old.id));
+             return;
+          }
 
           const sender = await resolveSender(record.sender_id ?? null);
 
@@ -127,10 +132,14 @@ export function useRealtimeMessages({
             conversationId: record.conversation_id,
             readAt: null,
             createdAt: record.created_at,
+            updatedAt: record.updated_at,
           };
 
           if (mountedRef.current) {
             setMessages((prev) => {
+              if (payload.eventType === 'UPDATE') {
+                  return prev.map(m => m.id === msg.id ? msg : m);
+              }
               if (prev.some((m) => m.id === msg.id)) return prev;
               return [...prev, msg];
             });

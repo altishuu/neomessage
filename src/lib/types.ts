@@ -11,6 +11,7 @@ export interface Conversation {
   id: string;
   title: string | null;
   isGroup: boolean;
+  isPinned: boolean;
   createdAt: string;
   updatedAt: string;
   lastMessageAt?: string | null;
@@ -27,6 +28,15 @@ export interface Participant {
   avatarUrl: string | null;
 }
 
+export interface Reaction {
+  id: string;
+  messageId: string;
+  userId: string;
+  reaction: string;
+  createdAt: string;
+  user: { id: string; username: string; avatarUrl: string | null } | null;
+}
+
 export interface Message {
   id: string;
   content: string;
@@ -36,4 +46,6 @@ export interface Message {
   conversationId: string;
   readAt?: string | null;
   createdAt: string;
+  updatedAt?: string | null;
+  deletedAt?: string | null;
 }

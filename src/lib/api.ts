@@ -113,3 +113,36 @@ export async function sendMessage(
     body: JSON.stringify({ conversationId, content }),
   });
 }
+
+export async function editMessage(
+  messageId: string,
+  content: string
+): Promise<{ message: Message }> {
+  return request(`/api/messages/${encodeURIComponent(messageId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ content }),
+  });
+}
+
+export async function deleteMessage(
+  messageId: string
+): Promise<{ success: boolean }> {
+  return request(`/api/messages/${encodeURIComponent(messageId)}`, {
+    method: "DELETE",
+  });
+}
+
+// ── Pin ─────────────────────────────────────────────
+
+export async function togglePin(
+  conversationId: string,
+  isPinned: boolean
+): Promise<{ isPinned: boolean }> {
+  return request(
+    `/api/conversations/${encodeURIComponent(conversationId)}/pin`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ isPinned }),
+    }
+  );
+}

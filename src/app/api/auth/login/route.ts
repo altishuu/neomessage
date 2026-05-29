@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
+import { createServerSupabaseClient } from "@/lib/supabase/middleware";
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,39 +9,19 @@ export async function POST(request: NextRequest) {
     if (!email || !password) {
       return NextResponse.json(
         { error: "Email and password are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (typeof email !== "string" || typeof password !== "string") {
       return NextResponse.json(
         { error: "Invalid input types" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    let supabaseResponse = NextResponse.next({ request });
-
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll();
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value }) =>
-              request.cookies.set(name, value)
-            );
-            supabaseResponse = NextResponse.next({ request });
-            cookiesToSet.forEach(({ name, value, options }) =>
-              supabaseResponse.cookies.set(name, value, options)
-            );
-          },
-        },
-      }
-    );
+    const { supabase, supabaseResponse } =
+      createServerSupabaseClient(request);
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email: email as string,
@@ -51,7 +31,7 @@ export async function POST(request: NextRequest) {
     if (error) {
       return NextResponse.json(
         { error: "Invalid email or password" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 

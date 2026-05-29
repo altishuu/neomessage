@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { TablesUpdate } from "@/lib/supabase/types";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -113,7 +114,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Build update payload (use snake_case for DB columns)
-    const updateData: Record<string, string> = {};
+    const updateData: TablesUpdate<"user_profiles"> = {};
 
     if (displayName !== undefined) {
       if (typeof displayName !== "string") {

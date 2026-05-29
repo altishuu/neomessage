@@ -17,7 +17,7 @@ export async function GET(_request: NextRequest) {
     // Fetch conversations where the user is a participant (not soft-deleted)
     const { data: participations, error: partError } = await supabase
       .from("conversation_participants")
-      .select("conversation_id, last_read_at")
+      .select("conversation_id, last_read_at, is_pinned")
       .eq("user_id", user.id)
       .is("deleted_at", null);
 
@@ -85,7 +85,13 @@ export async function GET(_request: NextRequest) {
     }
 
     // Fetch sender profiles for last messages
-    const senderIds = [...new Set(lastMessages?.map((m) => m.sender_id).filter(Boolean) ?? [])];
+    const senderIds = [
+      ...new Set(
+        (lastMessages ?? [])
+          .map((m) => m.sender_id)
+          .filter((id): id is string => id !== null),
+      ),
+    ];
     const { data: senderProfiles } = await supabase
       .from("user_profiles")
       .select("user_id, username, avatar_url")
@@ -103,48 +109,64 @@ export async function GET(_request: NextRequest) {
       participantsByConv.set(p.conversation_id, list);
     }
 
-    const result = (conversations ?? []).map((conv) => {
-      const convParticipants = participantsByConv.get(conv.id) ?? [];
-      const lastMsg = lastMessageMap.get(conv.id) ?? null;
-      const lastSender = lastMsg?.sender_id
-        ? senderProfileMap.get(lastMsg.sender_id) ?? null
-        : null;
+    // Build a map of conversation_id → isPinned for the current user
+    const pinMap = new Map<string, boolean>(
+      (participations ?? []).map((p) => [p.conversation_id, p.is_pinned])
+    );
 
-      return {
-        id: conv.id,
-        title: conv.title,
-        isGroup: conv.is_group,
-        createdAt: conv.created_at,
-        updatedAt: conv.updated_at,
-        lastMessageAt: conv.last_message_at,
-        participants: convParticipants.map((p) => {
-          const prof = profileMap.get(p.user_id);
-          return {
-            id: p.user_id,
-            username: prof?.username ?? "unknown",
-            email: null, // Not exposed to protect privacy — use profile info
-            displayName: prof?.display_name ?? prof?.username ?? "Unknown",
-            avatarUrl: prof?.avatar_url ?? null,
-          };
-        }),
-        lastMessage: lastMsg
-          ? {
-              id: lastMsg.id,
-              content: lastMsg.content,
-              senderId: lastMsg.sender_id,
-              sender: lastSender
-                ? {
-                    id: lastSender.user_id,
-                    username: lastSender.username,
-                    avatarUrl: lastSender.avatar_url,
-                  }
-                : null,
-              conversationId: lastMsg.conversation_id,
-              createdAt: lastMsg.created_at,
-            }
-          : null,
-      };
-    });
+    const result = (conversations ?? [])
+      .map((conv) => {
+        const convParticipants = participantsByConv.get(conv.id) ?? [];
+        const lastMsg = lastMessageMap.get(conv.id) ?? null;
+        const lastSender = lastMsg?.sender_id
+          ? senderProfileMap.get(lastMsg.sender_id) ?? null
+          : null;
+
+        return {
+          id: conv.id,
+          title: conv.title,
+          isGroup: conv.is_group,
+          isPinned: pinMap.get(conv.id) ?? false,
+          createdAt: conv.created_at,
+          updatedAt: conv.updated_at,
+          lastMessageAt: conv.last_message_at,
+          participants: convParticipants.map((p) => {
+            const prof = profileMap.get(p.user_id);
+            return {
+              id: p.user_id,
+              username: prof?.username ?? "unknown",
+              email: null, // Not exposed to protect privacy — use profile info
+              displayName: prof?.display_name ?? prof?.username ?? "Unknown",
+              avatarUrl: prof?.avatar_url ?? null,
+            };
+          }),
+          lastMessage: lastMsg
+            ? {
+                id: lastMsg.id,
+                content: lastMsg.content,
+                senderId: lastMsg.sender_id,
+                sender: lastSender
+                  ? {
+                      id: lastSender.user_id,
+                      username: lastSender.username,
+                      avatarUrl: lastSender.avatar_url,
+                    }
+                  : null,
+                conversationId: lastMsg.conversation_id,
+                createdAt: lastMsg.created_at,
+              }
+            : null,
+        };
+      })
+      .sort((a, b) => {
+        // Pinned first, then by lastMessageAt descending
+        if (a.isPinned !== b.isPinned) {
+          return a.isPinned ? -1 : 1;
+        }
+        const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+        const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+        return bTime - aTime;
+      });
 
     return NextResponse.json({ conversations: result });
   } catch (error) {
@@ -247,6 +269,8 @@ export async function POST(request: NextRequest) {
               .eq("id", convId)
               .single();
 
+            if (!conv) continue;
+
             const { data: convParticipants } = await supabase
               .from("conversation_participants")
               .select("user_id")
@@ -258,7 +282,7 @@ export async function POST(request: NextRequest) {
               .select("user_id, username, display_name, avatar_url")
               .in(
                 "user_id",
-                (convParticipants ?? []).map((p) => p.user_id)
+                (convParticipants ?? []).map((p) => p.user_id),
               );
 
             return NextResponse.json({
