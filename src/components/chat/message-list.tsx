@@ -4,7 +4,6 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { Message, Reaction } from "@/lib/types";
-import type { TypingUser } from "@/lib/hooks/use-typing-presence";
 import { useAuth } from "@/lib/auth-context";
 import { useRealtimeReactions } from "@/lib/hooks/use-realtime-reactions";
 import { MessageActions } from "./message-actions";
@@ -13,7 +12,7 @@ import { FileText, Image as ImageIcon, Download, Maximize2, X } from "lucide-rea
 interface MessageListProps {
   messages: Message[];
   loading?: boolean;
-  typingUsers?: TypingUser[];
+  typingUsers?: string[];
   conversationId: string;
 }
 
@@ -118,7 +117,7 @@ export function MessageList({ messages, loading, typingUsers = [], conversationI
     setIsEditing(false);
   };
 
-  const othersTyping = typingUsers.filter((tu) => tu.userId !== user?.id);
+  const othersTyping = typingUsers.filter((tu) => tu !== user?.id);
 
   if (loading) {
     return (

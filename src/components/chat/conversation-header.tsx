@@ -1,13 +1,13 @@
 "use client";
 
 import type { User } from "@/lib/types";
-import type { TypingUser } from "@/lib/hooks/use-typing-presence";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
+import { useMemo } from "react";
 
 interface ConversationHeaderProps {
   participants: User[];
-  typingUsers?: TypingUser[];
+  typingUsers?: string[];
 }
 
 export function ConversationHeader({
@@ -20,14 +20,18 @@ export function ConversationHeader({
   const name =
     otherParticipants.map((p) => p.username).join(", ") || "Unknown";
 
-  // Only show typing indicator for other users
-  const othersTyping = typingUsers.filter((tu) => tu.userId !== user?.id);
+  // Map typing user IDs to usernames from participants, exclude current user
+  const othersTyping = useMemo(() => {
+    return (user ? typingUsers.filter((id) => id !== user.id) : typingUsers)
+      .map((id) => participants.find((p) => p.id === id)?.username)
+      .filter((u): u is string => !!u);
+  }, [typingUsers, participants, user]);
+
   const typingText = othersTyping.length === 1
-    ? othersTyping[0].username
+    ? othersTyping[0]
     : othersTyping.length > 1
     ? `several users`
     : "";
-
 
   return (
     <header className="flex items-center gap-3 px-4 py-3 border-b border-border bg-surface-raised flex-shrink-0">
