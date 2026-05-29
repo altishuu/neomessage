@@ -138,8 +138,7 @@ export default function ConversationPage() {
         </div>
       )}
 
-
-
+      {/* Messages */}
       {/* Messages */}
       <MessageList
         messages={messages}
