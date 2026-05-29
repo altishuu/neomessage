@@ -66,22 +66,17 @@ export async function GET(_request: NextRequest) {
       (profiles ?? []).map((p) => [p.user_id, p])
     );
 
-    // Fetch the last message for each conversation
+    // Fetch the latest message per conversation using an optimized DB function
+    // (DISTINCT ON + single scan instead of fetching all messages and filtering in JS)
     const { data: lastMessages, error: msgError } = await supabase
-      .from("messages")
-      .select("id, content, sender_id, conversation_id, created_at")
-      .in("conversation_id", conversationIds)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false });
+      .rpc("get_latest_messages", { conv_ids: conversationIds });
 
     if (msgError) throw msgError;
 
     // Build a map of conversation_id → last message
     const lastMessageMap = new Map<string, typeof lastMessages[0]>();
     for (const msg of lastMessages ?? []) {
-      if (!lastMessageMap.has(msg.conversation_id)) {
-        lastMessageMap.set(msg.conversation_id, msg);
-      }
+      lastMessageMap.set(msg.conversation_id, msg);
     }
 
     // Fetch sender profiles for last messages

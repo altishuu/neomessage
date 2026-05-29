@@ -295,7 +295,16 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      get_latest_messages: {
+        Args: { conv_ids: string[] }
+        Returns: {
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          sender_id: string
+        }[]
+      }
     }
     Enums: {
       message_type: "text" | "system" | "image" | "file"

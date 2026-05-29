@@ -48,4 +48,5 @@ export interface Message {
   createdAt: string;
   updatedAt?: string | null;
   deletedAt?: string | null;
+  metadata?: Record<string, unknown>;
 }

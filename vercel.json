@@ -11,7 +11,8 @@
     "autoAlias": true
   },
   "env": {
-    "NEXT_PUBLIC_SUPABASE_URL": "https://zpyplkyoodizqvpjoegg.supabase.co"
+    "NEXT_PUBLIC_SUPABASE_URL": "https://zpyplkyoodizqvpjoegg.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpweXBsa3lvb2RpenF2cGpvZWdnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc4MjM3NDIsImV4cCI6MjA2MzM5OTc0Mn0.KjnC7DxJ9q6BUdLQy7PJRxk42h6GvJQf7WuFaFY2D3kM"
   },
   "crons": []
 }

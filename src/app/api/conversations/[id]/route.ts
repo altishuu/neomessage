@@ -137,6 +137,9 @@ export async function GET(
             type: m.type,
             conversationId: m.conversation_id,
             createdAt: m.created_at,
+            updatedAt: m.updated_at,
+            deletedAt: m.deleted_at,
+            metadata: m.metadata,
           };
         }),
       },
