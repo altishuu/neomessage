@@ -91,8 +91,6 @@ export function Sidebar() {
 
   const handleTogglePin = useCallback(
     async (convId: string, currentPinned: boolean) => {
-      // Snapshot for rollback
-      const snapshot = conversations;
       const newPinned = !currentPinned;
 
       // Optimistic update
@@ -103,11 +101,13 @@ export function Sidebar() {
       try {
         await togglePin(convId, newPinned);
       } catch {
-        // Rollback on error
-        setConversations(snapshot);
+        // Rollback on error — use functional updater so we're never stale
+        setConversations((prev) =>
+          prev.map((c) => (c.id === convId ? { ...c, isPinned: currentPinned } : c))
+        );
       }
     },
-    [conversations]
+    [] // togglePin and setConversations are both stable
   );
 
   return (

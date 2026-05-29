@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     const conversationId = formData.get("conversationId") as string | null;
+    const textContent = (formData.get("content") as string | null)?.trim() || null;
 
     if (!file || !conversationId) {
       return NextResponse.json({ error: "Missing file or conversationId" }, { status: 400 });
@@ -107,12 +108,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to generate access URL" }, { status: 500 });
     }
 
+    // 9. Persist the signed URL in metadata so it's available when rendering messages
+    const updatedMetadata = {
+      ...(message.metadata as Record<string, unknown>),
+      signedUrl: signedUrlData.signedUrl,
+    };
+    await supabase
+      .from("messages")
+      .update({ metadata: updatedMetadata })
+      .eq("id", message.id);
+
     return NextResponse.json({
       message: {
         id: message.id,
         type: message.type,
         content: message.content,
-        metadata: message.metadata,
+        metadata: updatedMetadata,
         createdAt: message.created_at,
       },
       signedUrl: signedUrlData.signedUrl,

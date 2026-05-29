@@ -138,23 +138,7 @@ export default function ConversationPage() {
         </div>
       )}
 
-      {/* Presence connection status */}
-      {false && (
-        <div className="px-4 py-1 bg-amber/5 border-b border-amber/20">
-          <p className="font-mono text-[9px] text-amber/60 text-center">
-            ~$ typing indicator disconnected
-          </p>
-        </div>
-      )}
-   
-      {/* Presence error */}
-      {false && (
-        <div className="px-4 py-1 bg-red/10 border-b border-red/30">
-          <p className="font-mono text-[9px] text-red/70 text-center">
-            [presence] error
-          </p>
-        </div>
-      )}
+
 
       {/* Messages */}
       <MessageList

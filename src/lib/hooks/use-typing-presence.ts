@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
 interface TypingPresence {
   typingUsers: string[];
@@ -21,7 +22,7 @@ export interface TypingUser {
 export function useTypingPresence(conversationId: string, userId: string): TypingPresence {
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const supabase = useRef(createClient());
-  const channelRef = useRef<any>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastBroadcastRef = useRef<number>(0);
 
