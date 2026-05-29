@@ -8,7 +8,7 @@ import { useRealtimeMessages } from "@/lib/hooks/use-realtime-messages";
 import { useTypingPresence } from "@/lib/hooks/use-typing-presence";
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { MessageList } from "@/components/chat/message-list";
-import { ChatInputContainer } from "@/components/chat/chat-input-container";
+import ChatInputContainer from "@/components/chat/chat-input-container";
 import type { Conversation } from "@/lib/types";
 
 export default function ConversationPage() {
