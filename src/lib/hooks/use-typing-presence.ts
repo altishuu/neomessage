@@ -31,45 +31,42 @@ export function useTypingPresence(conversationId: string, userId: string): Typin
     const channel = supabase.current.channel(`presence:conversation:${conversationId}`, {
       config: {
         presence: {
-          lateJoin: true,
+          key: userId,
         },
       },
     });
 
     channel
-      .on('presence.state', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        // Extract user IDs who are currently marked as typing
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState<{ userId: string; typing: boolean }>();
         const users = Object.entries(state)
-          .flatMap(([id, members]) => 
-            members.filter((m: any) => m.typing === true).map((m: any) => m.userId)
+          .flatMap(([, members]) =>
+            members.filter((m) => m.typing === true).map((m) => m.userId)
           )
-          .filter((id) => id !== userId); // Exclude current user
-        
+          .filter((id) => id !== userId);
+
         setTypingUsers([...new Set(users)]);
       })
-      .on('presence.state', { event: 'join' }, ({ members }) => {
-        const users = members
-          .filter((m: any) => m.typing === true)
-          .map((m: any) => m.userId)
+      .on('presence', { event: 'join' }, (payload) => {
+        const users = payload.newPresences
+          .filter((m) => m.typing === true)
+          .map((m) => m.userId)
           .filter((id) => id !== userId);
-        
+
         setTypingUsers((prev) => [...new Set([...prev, ...users])]);
       })
-      .on('presence.state', { event: 'leave' }, ({ members }) => {
-        // Recalculate based on current state since leave events just tell us who left
-        const state = channel.presenceState();
+      .on('presence', { event: 'leave' }, () => {
+        const state = channel.presenceState<{ userId: string; typing: boolean }>();
         const users = Object.entries(state)
-          .flatMap(([id, members]) => 
-            members.filter((m: any) => m.typing === true).map((m: any) => m.userId)
+          .flatMap(([, members]) =>
+            members.filter((m) => m.typing === true).map((m) => m.userId)
           )
           .filter((id) => id !== userId);
-        
+
         setTypingUsers([...new Set(users)]);
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          // Initial track to be present in the channel without typing
           await channel.track({
             userId,
             typing: false,
@@ -106,7 +103,6 @@ export function useTypingPresence(conversationId: string, userId: string): Typin
     if (!channelRef.current) return;
 
     const now = Date.now();
-    // Throttle broadcasts to once per 2s
     if (now - lastBroadcastRef.current < 2000) {
       return;
     }
@@ -118,7 +114,6 @@ export function useTypingPresence(conversationId: string, userId: string): Typin
       typing: true,
     });
 
-    // Auto-cleanup after 4s inactivity
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
