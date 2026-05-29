@@ -112,6 +112,7 @@ export function MessageList({ messages, loading, typingUsers = [], conversationI
   const handleSave = async (msg: Message) => {
     await fetch(`/api/messages/${msg.id}`, {
       method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: editContent }),
     });
     setIsEditing(false);
@@ -197,7 +198,7 @@ export function MessageList({ messages, loading, typingUsers = [], conversationI
                     <textarea
                         ref={inputRef}
                         value={editContent}
-                        onChange={(e) => setEditContent(editContent)}
+                        onChange={(e) => setEditContent(e.target.value)}
                         className="font-mono text-sm bg-surface text-text w-full p-1 border border-magenta"
                         onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSave(msg); }
@@ -206,7 +207,7 @@ export function MessageList({ messages, loading, typingUsers = [], conversationI
                     />
                     <div className="flex gap-2">
                         <button className="text-[10px] font-mono text-cyan" onClick={() => handleSave(msg)}>Save</button>
-                        <button className="text-[10px] font-mono text-text-muted" onClick={() => setIsEditing(false)}>Save</button>
+                        <button className="text-[10px] font-mono text-text-muted" onClick={() => setIsEditing(false)}>Cancel</button>
                     </div>
                 </div>
               ) : (
