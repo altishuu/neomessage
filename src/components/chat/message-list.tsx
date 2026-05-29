@@ -342,7 +342,7 @@ export function MessageList({ messages, loading, typingUsers = [], conversationI
       {othersTyping.length > 0 && (
         <div className="flex items-center gap-2 px-4 py-1.5">
           <span className="font-mono text-[11px] text-cyan/70 animate-pulse">
-            ~$ {othersTyping.map((tu) => tu.username).join(", ")}{" "}
+            ~$ {othersTyping.length > 1 ? "Several people" : "Someone"}{" "}
             {othersTyping.length === 1 ? "is" : "are"} typing
             <span className="inline-flex ml-0.5">
               <span className="animate-typing-dot">.</span>
