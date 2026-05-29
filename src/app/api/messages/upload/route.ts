@@ -70,8 +70,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "File upload failed" }, { status: 500 });
     }
 
-    // 6. Determine message type
-    const messageType = file.type.startsWith("image/") ? "image" : "file";
+    // 6. Determine message type and content
+    //    When textContent is present, create a single text+file combined message
+    //    When absent, create a file/image-only message (legacy behaviour)
+    const fileBasedType = file.type.startsWith("image/") ? "image" : "file";
+    const messageType = textContent ? "text" : fileBasedType;
+    const messageContent = textContent || filename;
+
+    const fileMetadata = {
+      file_url: uploadData.path,
+      mime_type: file.type,
+      file_size: file.size,
+      file_name: filename,
+    };
 
     // 7. Insert message row into 'messages' table
     const { data: message, error: insertError } = await supabase
@@ -80,13 +91,8 @@ export async function POST(request: NextRequest) {
         conversation_id: conversationId,
         sender_id: user.id,
         type: messageType,
-        content: filename, // content stores the filename for file messages
-        metadata: {
-          file_url: uploadData.path,
-          mime_type: file.type,
-          file_size: file.size,
-          file_name: filename,
-        },
+        content: messageContent,
+        metadata: fileMetadata,
       })
       .select("*")
       .single();
@@ -110,7 +116,7 @@ export async function POST(request: NextRequest) {
 
     // 9. Persist the signed URL in metadata so it's available when rendering messages
     const updatedMetadata = {
-      ...(message.metadata as Record<string, unknown>),
+      ...fileMetadata,
       signedUrl: signedUrlData.signedUrl,
     };
     await supabase
@@ -127,6 +133,7 @@ export async function POST(request: NextRequest) {
         createdAt: message.created_at,
       },
       signedUrl: signedUrlData.signedUrl,
+      textIncluded: !!textContent,
     });
 
   } catch (error) {

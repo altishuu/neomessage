@@ -61,6 +61,9 @@ export function MessageInput({
     const trimmed = content.trim();
     if ((!trimmed && !attachment) || sending || disabled) return;
 
+    // Track whether we had an attachment BEFORE removeAttachment() clears it
+    const hadAttachment = !!attachment;
+
     setSending(true);
     try {
       if (attachment) {
@@ -70,8 +73,13 @@ export function MessageInput({
         formData.append("file", attachment.file);
         formData.append("conversationId", conversationId);
 
+        // Include text content so the upload endpoint creates one combined message
+        if (trimmed) {
+          formData.append("content", trimmed);
+        }
+
         // We use XMLHttpRequest to track progress as fetch doesn't support upload progress natively
-        const uploadPromise = new Promise<{ message: any; signedUrl: string }>((resolve, reject) => {
+        const uploadPromise = new Promise<{ message: any; signedUrl: string; textIncluded?: boolean }>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
           xhr.open("POST", "/api/messages/upload");
           
@@ -94,15 +102,13 @@ export function MessageInput({
 
         const { message, signedUrl } = await uploadPromise;
         
-        // If there was text content, we can't easily "merge" them into one DB row 
-        // without a new API. For now, we treat the upload as a separate message 
-        // and then send the text message if it exists.
-        // The /api/messages/upload already creates a message row.
-        
         removeAttachment();
       }
 
-      if (trimmed) {
+      // Only send text separately if there was NO attachment
+      // (when attachment exists, text was already included in the upload FormData
+      //  and the backend creates a single combined message)
+      if (trimmed && !hadAttachment) {
         await onSend(trimmed);
       }
 
