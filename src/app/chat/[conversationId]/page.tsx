@@ -139,7 +139,6 @@ export default function ConversationPage() {
       )}
 
       {/* Messages */}
-      {/* Messages */}
       <MessageList
         messages={messages}
         loading={false}

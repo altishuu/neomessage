@@ -436,7 +436,7 @@ export function MessageList({
               setLightboxImage(null);
             }}
           >
-            <X className="w-6 w-6" />
+            <X className="w-6 h-6" />
           </button>
           <img
             src={lightboxImage}
