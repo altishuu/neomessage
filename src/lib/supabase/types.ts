@@ -39,6 +39,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      blocked_users: {
+        Row: {
+          blocked_id: string
+          blocker_id: string
+          created_at: string
+        }
+        Insert: {
+          blocked_id: string
+          blocker_id: string
+          created_at?: string
+        }
+        Update: {
+          blocked_id?: string
+          blocker_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blocked_users_blocked_id_fkey"
+            columns: ["blocked_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "blocked_users_blocker_id_fkey"
+            columns: ["blocker_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversation_participants: {
         Row: {
           conversation_id: string
@@ -295,6 +328,20 @@ export type Database = {
       }
     }
     Functions: {
+      is_sender_blocked_in_conversation: {
+        Args: {
+          p_sender_id: string
+          p_conversation_id: string
+        }
+        Returns: boolean
+      }
+      is_user_blocked: {
+        Args: {
+          p_blocker_id: string
+          p_target_id: string
+        }
+        Returns: boolean
+      }
       get_latest_messages: {
         Args: { conv_ids: string[] }
         Returns: {
