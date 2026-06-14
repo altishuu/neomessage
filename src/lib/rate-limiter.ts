@@ -110,6 +110,23 @@ export function rateLimitHeaders(result: RateLimitResult, limit: number): Record
 }
 
 /**
+ * Build a 429 JSON response with Retry-After and standard rate-limit headers.
+ */
+export function rateLimitResponse(result: RateLimitResult, limit: number): Response {
+  return new Response(
+    JSON.stringify({ error: "Too many requests. Please try again later." }),
+    {
+      status: 429,
+      headers: {
+        "Content-Type": "application/json",
+        "Retry-After": Math.ceil((result.resetMs - Date.now()) / 1000).toString(),
+        ...rateLimitHeaders(result, limit),
+      },
+    },
+  );
+}
+
+/**
  * Get the client IP from a NextRequest, respecting common proxy headers.
  */
 export function getClientIp(request: Request): string {

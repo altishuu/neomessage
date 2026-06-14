@@ -1,9 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase/middleware";
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/lib/rate-limiter";
+
+const REGISTER_LIMIT = 3;
+const REGISTER_WINDOW_MS = 3_600_000; // 1 hour
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit: 3 registration attempts per IP per hour
+    const ip = getClientIp(request);
+    const rateCheck = checkRateLimit(`register:${ip}`, REGISTER_LIMIT, REGISTER_WINDOW_MS);
+    if (!rateCheck.allowed) {
+      return rateLimitResponse(rateCheck, REGISTER_LIMIT);
+    }
+
     const body = await request.json();
     const { email, username, password } = body;
 
