@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getConversation, sendMessage, addParticipants, removeParticipant, deleteConversation, searchUsers } from "@/lib/api";
+import { getConversation, sendMessage, getMessages, addParticipants, removeParticipant, deleteConversation, searchUsers } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useRealtimeMessages } from "@/lib/hooks/use-realtime-messages";
 import { useTypingPresence } from "@/lib/hooks/use-typing-presence";
@@ -35,12 +35,16 @@ export default function ConversationPage() {
   const [addSearchError, setAddSearchError] = useState<string | null>(null);
   const [addingUsers, setAddingUsers] = useState(false);
   const [showReconnected, setShowReconnected] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
 
   const {
     messages,
     connected,
     error: realtimeError,
     setInitialMessages,
+    prependMessages,
     addMessage,
   } = useRealtimeMessages({
     conversationId,
@@ -72,6 +76,8 @@ export default function ConversationPage() {
         if (cancelled) return;
         setConversation(data.conversation);
         setInitialMessages(data.conversation.messages ?? []);
+        setHasMore(data.pagination?.hasMore ?? false);
+        setNextCursor(data.pagination?.nextCursor ?? null);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -104,6 +110,22 @@ export default function ConversationPage() {
     },
     [conversationId, addMessage, stopTyping]
   );
+
+  // ── Infinite scroll: load older messages ─────────────────────────
+  const loadOlderMessages = useCallback(async () => {
+    if (loadingOlder || !hasMore || !nextCursor) return;
+    setLoadingOlder(true);
+    try {
+      const data = await getMessages(conversationId, nextCursor);
+      prependMessages(data.messages);
+      setHasMore(data.pagination.hasMore);
+      setNextCursor(data.pagination.nextCursor);
+    } catch (err) {
+      console.error("Failed to load older messages:", err);
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [conversationId, loadingOlder, hasMore, nextCursor, prependMessages]);
 
   // ── Add participants search ─────────────────────────────────────
   useEffect(() => {
@@ -275,6 +297,9 @@ export default function ConversationPage() {
       <MessageList
         messages={messages}
         loading={false}
+        hasMore={hasMore}
+        loadingOlder={loadingOlder}
+        onLoadMore={loadOlderMessages}
         typingUsers={typingUsers}
         conversationId={conversationId}
       />

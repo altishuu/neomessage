@@ -30,9 +30,18 @@ export async function getConversations(): Promise<{
 }
 
 export async function getConversation(
-  id: string
-): Promise<{ conversation: Conversation }> {
-  return request(`/api/conversations/${id}`);
+  id: string,
+  cursor?: string,
+  limit?: number,
+): Promise<{
+  conversation: Conversation;
+  pagination: { hasMore: boolean; nextCursor: string | null };
+}> {
+  const params = new URLSearchParams();
+  if (cursor) params.set("cursor", cursor);
+  if (limit) params.set("limit", String(limit));
+  const query = params.toString();
+  return request(`/api/conversations/${id}${query ? `?${query}` : ""}`);
 }
 
 export async function createConversation(
@@ -103,6 +112,19 @@ export async function logout(): Promise<void> {
 }
 
 // ── Messages ────────────────────────────────────────
+
+export async function getMessages(
+  conversationId: string,
+  cursor?: string,
+  limit: number = 50,
+): Promise<{
+  messages: Message[];
+  pagination: { hasMore: boolean; nextCursor: string | null };
+}> {
+  const params = new URLSearchParams({ conversationId, limit: String(limit) });
+  if (cursor) params.set("cursor", cursor);
+  return request(`/api/messages?${params.toString()}`);
+}
 
 export async function sendMessage(
   conversationId: string,

@@ -152,6 +152,16 @@ export function useRealtimeMessages({
     });
   }, []);
 
+  const prependMessages = useCallback((olderMessages: Message[]) => {
+    setMessages((prev) => {
+      // Avoid duplicates by filtering out messages we already have
+      const existingIds = new Set(prev.map((m) => m.id));
+      const newOnes = olderMessages.filter((m) => !existingIds.has(m.id));
+      if (newOnes.length === 0) return prev;
+      return [...newOnes, ...prev];
+    });
+  }, []);
+
   const setInitialMessages = useCallback((msgs: Message[]) => {
     setMessages(msgs);
   }, []);
@@ -161,6 +171,7 @@ export function useRealtimeMessages({
     connected: status === "connected",
     error,
     addMessage,
+    prependMessages,
     setInitialMessages,
   };
 }

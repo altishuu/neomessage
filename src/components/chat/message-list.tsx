@@ -19,6 +19,9 @@ import {
 interface MessageListProps {
   messages: Message[];
   loading?: boolean;
+  hasMore?: boolean;
+  loadingOlder?: boolean;
+  onLoadMore?: () => void;
   typingUsers?: string[];
   conversationId: string;
 }
@@ -91,6 +94,9 @@ function MessageSkeleton() {
 export function MessageList({
   messages,
   loading,
+  hasMore = true,
+  loadingOlder = false,
+  onLoadMore,
   typingUsers = [],
   conversationId,
 }: MessageListProps) {
@@ -415,9 +421,22 @@ export function MessageList({
         className="flex-1"
         data={messages}
         followOutput="auto"
+        startReached={hasMore ? onLoadMore : undefined}
         itemContent={renderMessage}
         components={{
-          Header: () => <div className="pt-4" />,
+          Header: () => (
+            <>
+              {loadingOlder && (
+                <div className="flex items-center justify-center gap-2 py-3">
+                  <Loader2 className="w-4 h-4 text-cyan animate-spin" />
+                  <span className="font-mono text-[11px] text-cyan/70">
+                    ~$ Loading older messages...
+                  </span>
+                </div>
+              )}
+              <div className="pt-4" />
+            </>
+          ),
           Footer: () => (
             <>
               {othersTyping.length > 0 && (
