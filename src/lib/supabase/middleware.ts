@@ -37,6 +37,22 @@ export function createServerSupabaseClient(request: NextRequest) {
 }
 
 /**
+ * Apply cookies from a supabase server client response's cookie jar
+ * onto the actual API response. This is needed because Set-Cookie
+ * headers on the intermediate NextResponse are not automatically
+ * forwarded — we must copy them explicitly.
+ */
+export function applyAuthCookies(
+  supabaseResponse: Awaited<ReturnType<typeof createServerSupabaseClient>>['supabaseResponse'],
+  response: NextResponse,
+) {
+  const setCookieHeaders = supabaseResponse.headers.getSetCookie();
+  for (const cookie of setCookieHeaders) {
+    response.headers.append("Set-Cookie", cookie);
+  }
+}
+
+/**
  * Next.js middleware helper for Supabase auth session management.
  *
  * Refreshes the Supabase auth session on every request and returns

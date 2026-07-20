@@ -54,9 +54,10 @@ export async function POST(request: NextRequest) {
     });
 
     // Propagate auth cookies from the intermediate response
-    const setCookieHeaders = supabaseResponse.headers.getSetCookie();
-    for (const cookie of setCookieHeaders) {
-      response.headers.append("Set-Cookie", cookie);
+    // Use getAll/set instead of getSetCookie for reliable serialization
+    const authCookies = supabaseResponse.cookies.getAll();
+    for (const { name, value } of authCookies) {
+      response.cookies.set(name, value);
     }
 
     return response;

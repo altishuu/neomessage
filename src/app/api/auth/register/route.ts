@@ -139,9 +139,9 @@ export async function POST(request: NextRequest) {
     );
 
     // Propagate auth cookies from the intermediate response when session exists
-    const setCookieHeaders = supabaseResponse.headers.getSetCookie();
-    for (const cookie of setCookieHeaders) {
-      response.headers.append("Set-Cookie", cookie);
+    const authCookies = supabaseResponse.cookies.getAll();
+    for (const { name, value } of authCookies) {
+      response.cookies.set(name, value);
     }
 
     return response;
