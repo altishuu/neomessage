@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
@@ -10,22 +10,30 @@ import { PasswordStrength } from "@/components/ui/password-strength";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { setUser } = useAuth();
+  const { user, loading, setUser } = useAuth();
+
+  // Redirect to chat if already authenticated
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace("/chat");
+    }
+  }, [user, loading, router]);
+
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    setLoading(true);
+    setSubmitting(true);
 
     if (password !== confirmPassword) {
       setError("Passwords do not match");
-      setLoading(false);
+      setSubmitting(false);
       return;
     }
 
@@ -49,7 +57,7 @@ export default function RegisterPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   }
 
@@ -133,9 +141,9 @@ export default function RegisterPage() {
             variant="primary"
             size="lg"
             className="w-full"
-            disabled={loading}
+            disabled={submitting}
           >
-            {loading ? "~$ creating account..." : "~$ create account"}
+            {submitting ? "~$ creating account..." : "~$ create account"}
           </Button>
         </form>
 

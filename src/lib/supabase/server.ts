@@ -26,9 +26,15 @@ export async function createSupabaseServerClient() {
           return cookieStore.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
-          });
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options);
+            });
+          } catch {
+            // `cookies().set()` throws in Route Handlers (Next.js 15) because
+            // RequestCookies is read-only in that context. Silently ignore so
+            // the request doesn't 500 — auth reads still work via getAll().
+          }
         },
       },
     },

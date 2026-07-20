@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
@@ -9,16 +9,24 @@ import { Input } from "@/components/ui/input";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setUser } = useAuth();
+  const { user, loading, setUser } = useAuth();
+
+  // Redirect to chat if already authenticated
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace("/chat");
+    }
+  }, [user, loading, router]);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    setLoading(true);
+    setSubmitting(true);
 
     try {
       const res = await fetch("/api/auth/login", {
@@ -40,7 +48,7 @@ export default function LoginPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   }
 
@@ -97,9 +105,9 @@ export default function LoginPage() {
             variant="primary"
             size="lg"
             className="w-full"
-            disabled={loading}
+            disabled={submitting}
           >
-            {loading ? "~$ authenticating..." : "~$ login"}
+            {submitting ? "~$ authenticating..." : "~$ login"}
           </Button>
         </form>
 
