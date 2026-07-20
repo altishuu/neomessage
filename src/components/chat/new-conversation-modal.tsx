@@ -19,7 +19,11 @@ export function NewConversationModal({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<User[]>([]);
   const [searching, setSearching] = useState(false);
-  const [creating, setCreating] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedUsers, setSelectedUsers] = useState<Map<string, User>>(
+    new Map()
+  );
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -40,7 +44,10 @@ export function NewConversationModal({
       setSearching(true);
       try {
         const data = await searchUsers(query.trim());
-        setResults(data.users);
+        // Filter out already-selected users
+        setResults(
+          data.users.filter((u) => !selectedIds.has(u.id))
+        );
       } catch {
         setResults([]);
       } finally {
@@ -49,7 +56,8 @@ export function NewConversationModal({
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [query]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, selectedIds.size]);
 
   // Close on overlay click
   const handleOverlayClick = useCallback(
@@ -68,23 +76,96 @@ export function NewConversationModal({
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
-  const handleSelectUser = useCallback(
-    async (userId: string) => {
-      setCreating(userId);
-      setError(null);
-      try {
-        const { conversation } = await createConversation(userId);
-        onConversationCreated(conversation);
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to create conversation"
-        );
-      } finally {
-        setCreating(null);
+  // Toggle a user's selection for group creation
+  const toggleSelection = useCallback((user: User) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(user.id)) {
+        next.delete(user.id);
+      } else {
+        next.add(user.id);
+      }
+      return next;
+    });
+    setSelectedUsers((prev) => {
+      const next = new Map(prev);
+      if (next.has(user.id)) {
+        next.delete(user.id);
+      } else {
+        next.set(user.id, user);
+      }
+      return next;
+    });
+    setQuery("");
+  }, []);
+
+  // Click on a user: if it's the only selection, create DM; otherwise toggle
+  const handleUserClick = useCallback(
+    async (user: User) => {
+      if (selectedIds.size === 0) {
+        // No selections yet — create DM directly
+        setCreating(true);
+        setError(null);
+        try {
+          const { conversation } = await createConversation(user.id);
+          onConversationCreated(conversation);
+        } catch (err) {
+          setError(
+            err instanceof Error ? err.message : "Failed to create conversation"
+          );
+        } finally {
+          setCreating(false);
+        }
+      } else {
+        toggleSelection(user);
       }
     },
-    [onConversationCreated]
+    [selectedIds.size, toggleSelection, onConversationCreated]
   );
+
+  // Remove a selected user chip
+  const removeSelected = useCallback(
+    (userId: string) => {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(userId);
+        return next;
+      });
+      setSelectedUsers((prev) => {
+        const next = new Map(prev);
+        next.delete(userId);
+        return next;
+      });
+    },
+    []
+  );
+
+  // Clear all selections
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+    setSelectedUsers(new Map());
+  }, []);
+
+  // Create group conversation with all selected users
+  const handleCreateGroup = useCallback(async () => {
+    if (selectedIds.size < 2) return;
+    setCreating(true);
+    setError(null);
+    try {
+      const { conversation } = await createConversation(
+        Array.from(selectedIds)
+      );
+      onConversationCreated(conversation);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to create group"
+      );
+    } finally {
+      setCreating(false);
+    }
+  }, [selectedIds, onConversationCreated]);
+
+  const isGroupMode = selectedIds.size > 0;
 
   return (
     <div
@@ -96,15 +177,47 @@ export function NewConversationModal({
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <h2 className="font-mono text-sm font-bold text-cyan uppercase tracking-wider">
-            ~$ New Conversation
+            {isGroupMode ? "~$ New Group" : "~$ New Conversation"}
           </h2>
-          <button
-            onClick={onClose}
-            className="font-mono text-xs text-text-dim hover:text-text transition-colors"
-          >
-            [x]
-          </button>
+          <div className="flex items-center gap-2">
+            {isGroupMode && (
+              <button
+                onClick={clearSelection}
+                className="font-mono text-[10px] text-text-dim hover:text-text transition-colors"
+              >
+                [clear]
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="font-mono text-xs text-text-dim hover:text-text transition-colors"
+            >
+              [x]
+            </button>
+          </div>
         </div>
+
+        {/* Selected users chips */}
+        {isGroupMode && (
+          <div className="px-4 pt-3 flex flex-wrap gap-1.5">
+            {Array.from(selectedUsers.values()).map((user) => (
+              <span
+                key={user.id}
+                className="inline-flex items-center gap-1 px-2 py-1 bg-cyan/10 border border-cyan/30 rounded-sm"
+              >
+                <span className="font-mono text-[11px] text-cyan">
+                  {user.username}
+                </span>
+                <button
+                  onClick={() => removeSelected(user.id)}
+                  className="text-cyan/60 hover:text-cyan transition-colors"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* Search */}
         <div className="px-4 py-3">
@@ -113,7 +226,11 @@ export function NewConversationModal({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by username..."
+            placeholder={
+              isGroupMode
+                ? "Search more users..."
+                : "Search by username..."
+            }
             className={cn(
               "w-full bg-surface border border-border rounded-sm px-3 py-2.5",
               "font-mono text-sm text-text placeholder:text-text-muted",
@@ -138,25 +255,65 @@ export function NewConversationModal({
                 Searching...
               </p>
             </div>
-          ) : query.trim().length < 2 ? (
+          ) : query.trim().length < 2 && !isGroupMode ? (
             <div className="flex items-center justify-center py-8">
               <p className="font-mono text-xs text-text-muted">
                 Type at least 2 characters to search
               </p>
             </div>
-          ) : results.length === 0 ? (
+          ) : results.length === 0 && query.trim().length >= 2 ? (
             <div className="flex items-center justify-center py-8">
               <p className="font-mono text-xs text-text-dim">
                 ~$ no users found
               </p>
+            </div>
+          ) : isGroupMode ? (
+            <div className="py-1">
+              {results.length === 0 && query.trim().length < 2 ? (
+                <div className="flex items-center justify-center py-8">
+                  <p className="font-mono text-xs text-text-muted">
+                    Search to add more users
+                  </p>
+                </div>
+              ) : (
+                results.map((user) => (
+                  <button
+                    key={user.id}
+                    onClick={() => toggleSelection(user)}
+                    disabled={creating}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-4 py-3 text-left transition-colors duration-150",
+                      "hover:bg-surface border-b border-border/50 last:border-b-0",
+                      "disabled:opacity-40 disabled:cursor-not-allowed"
+                    )}
+                  >
+                    <Avatar
+                      username={user.username}
+                      avatarUrl={user.avatarUrl}
+                      size="md"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <span className="font-mono text-sm text-text">
+                        {user.username}
+                      </span>
+                      <p className="font-mono text-xs text-text-dim truncate mt-0.5">
+                        {user.email}
+                      </p>
+                    </div>
+                    <span className="font-mono text-[10px] text-cyan">
+                      + Add
+                    </span>
+                  </button>
+                ))
+              )}
             </div>
           ) : (
             <div className="py-1">
               {results.map((user) => (
                 <button
                   key={user.id}
-                  onClick={() => handleSelectUser(user.id)}
-                  disabled={creating === user.id}
+                  onClick={() => handleUserClick(user)}
+                  disabled={creating === true}
                   className={cn(
                     "w-full flex items-center gap-3 px-4 py-3 text-left transition-colors duration-150",
                     "hover:bg-surface border-b border-border/50 last:border-b-0",
@@ -176,7 +333,7 @@ export function NewConversationModal({
                       {user.email}
                     </p>
                   </div>
-                  {creating === user.id ? (
+                  {creating ? (
                     <span className="font-mono text-[10px] text-cyan animate-pulse">
                       Creating...
                     </span>
@@ -192,10 +349,27 @@ export function NewConversationModal({
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end px-4 py-3 border-t border-border">
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
+        <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+          <span className="font-mono text-[10px] text-text-muted">
+            {isGroupMode
+              ? `${selectedIds.size} user${selectedIds.size !== 1 ? "s" : ""} selected`
+              : "Click a user to start a DM"}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              Cancel
+            </Button>
+            {isGroupMode && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleCreateGroup}
+                disabled={creating || selectedIds.size < 2}
+              >
+                {creating ? "Creating..." : "Start Group"}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>
