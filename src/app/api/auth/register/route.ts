@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the auth user via Supabase Auth
-    const { supabase, supabaseResponse } =
+    const { supabase, supabaseResponse, pendingCookies } =
       createServerSupabaseClient(request);
 
     const { data, error } = await supabase.auth.signUp({
@@ -138,9 +138,8 @@ export async function POST(request: NextRequest) {
       { status: 201 },
     );
 
-    // Propagate auth cookies from the intermediate response when session exists
-    const authCookies = supabaseResponse.cookies.getAll();
-    for (const { name, value } of authCookies) {
+    // Apply auth cookies onto the actual response
+    for (const { name, value } of pendingCookies) {
       response.cookies.set(name, value);
     }
 

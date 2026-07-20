@@ -3,14 +3,26 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/supabase/types";
 
 /**
+ * Cookie descriptor as returned by the supabase SSR cookie callbacks.
+ */
+export interface PendingCookie {
+  name: string;
+  value: string;
+  options?: Record<string, unknown>;
+}
+
+/**
  * Create a Supabase server client with cookie handling for Next.js middleware
  * and API routes.
  *
- * Handles reading cookies from the request and writing them back to the response
- * so auth sessions are properly maintained across server-side operations.
+ * In addition to the supabase client and an intermediate response (used by
+ * the middleware), this also returns a `pendingCookies` array that collects
+ * all cookies the supabase library wants to set. API routes can then apply
+ * these cookies onto their own final response via `applyPendingCookies()`.
  */
 export function createServerSupabaseClient(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
+  const pendingCookies: PendingCookie[] = [];
 
   const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,34 +33,44 @@ export function createServerSupabaseClient(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
+          const optsArray = cookiesToSet.map(
+            ({ name, value, options }) => ({ name, value, options }),
+          );
+
+          // Update the request cookie jar so subsequent getCookie readers
+          // see the updated values.
+          optsArray.forEach(({ name, value }) =>
             request.cookies.set(name, value),
           );
+
+          // Re-create the intermediate response (for middleware use).
           supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
+          optsArray.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options),
           );
+
+          // Collect every cookie so API routes can apply them to their
+          // own response (where NextResponse.next() cookies are not
+          // automatically serialised).
+          pendingCookies.push(...optsArray);
         },
       },
     },
   );
 
-  return { supabase, supabaseResponse };
+  return { supabase, supabaseResponse, pendingCookies };
 }
 
 /**
- * Apply cookies from a supabase server client response's cookie jar
- * onto the actual API response. This is needed because Set-Cookie
- * headers on the intermediate NextResponse are not automatically
- * forwarded — we must copy them explicitly.
+ * Apply cookies that were collected during Supabase operations onto a
+ * response that will actually be returned by an API route.
  */
-export function applyAuthCookies(
-  supabaseResponse: Awaited<ReturnType<typeof createServerSupabaseClient>>['supabaseResponse'],
+export function applyPendingCookies(
   response: NextResponse,
+  pendingCookies: PendingCookie[],
 ) {
-  const setCookieHeaders = supabaseResponse.headers.getSetCookie();
-  for (const cookie of setCookieHeaders) {
-    response.headers.append("Set-Cookie", cookie);
+  for (const { name, value } of pendingCookies) {
+    response.cookies.set(name, value);
   }
 }
 
