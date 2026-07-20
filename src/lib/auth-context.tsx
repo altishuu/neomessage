@@ -11,20 +11,31 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@/lib/types";
 
-/** Map a Supabase user to our app's User type. */
+/** Map a Supabase user to our app's User type, merging with profile data. */
 function mapUser(
-  supabaseUser: import("@supabase/supabase-js").User
+  supabaseUser: import("@supabase/supabase-js").User,
+  profile?: {
+    username: string;
+    display_name: string | null;
+    avatar_url: string | null;
+  } | null,
 ): User {
   const username =
-    (supabaseUser.user_metadata?.username as string) ?? "";
+    profile?.username ??
+    (supabaseUser.user_metadata?.username as string) ??
+    "";
   return {
     id: supabaseUser.id,
     email: supabaseUser.email ?? "",
     username,
     displayName:
-      (supabaseUser.user_metadata?.display_name as string) ?? username,
+      profile?.display_name ??
+      (supabaseUser.user_metadata?.display_name as string) ??
+      username,
     avatarUrl:
-      (supabaseUser.user_metadata?.avatar_url as string | null) ?? null,
+      profile?.avatar_url ??
+      (supabaseUser.user_metadata?.avatar_url as string | null) ??
+      null,
   };
 }
 
@@ -44,6 +55,22 @@ const AuthContext = createContext<AuthContextValue>({
   setUser: () => {},
 });
 
+/**
+ * Fetch the user_profiles row for a given auth user ID.
+ * Returns null silently on error / missing row.
+ */
+async function fetchProfile(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+) {
+  const { data } = await supabase
+    .from("user_profiles")
+    .select("username, display_name, avatar_url")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,11 +88,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } = await supabase.auth.getUser();
 
       if (getUserError) throw getUserError;
-      setUser(supabaseUser ? mapUser(supabaseUser) : null);
+
+      if (supabaseUser) {
+        // Fetch profile data from user_profiles table (source of truth for avatar, display name)
+        const profile = await fetchProfile(supabase, supabaseUser.id);
+        setUser(mapUser(supabaseUser, profile));
+      } else {
+        setUser(null);
+      }
     } catch (err) {
       setUser(null);
       setError(
-        err instanceof Error ? err.message : "Failed to load user"
+        err instanceof Error ? err.message : "Failed to load user",
       );
     } finally {
       setLoading(false);
@@ -77,14 +111,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true;
 
     // Fetch initial user
-    supabase.auth.getUser().then(({ data, error: getUserError }) => {
+    supabase.auth.getUser().then(async ({ data, error: getUserError }) => {
       if (!mounted) return;
       if (getUserError) {
         setError(getUserError.message);
       } else if (data.user) {
-        setUser(mapUser(data.user));
+        const profile = await fetchProfile(supabase, data.user.id);
+        if (mounted) {
+          setUser(mapUser(data.user, profile));
+        }
       }
-      setLoading(false);
+      if (mounted) setLoading(false);
     });
 
     // Listen for auth state changes (login / logout / token refresh)
@@ -93,7 +130,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
       if (session?.user) {
-        setUser(mapUser(session.user));
+        // Fire-and-forget profile fetch — don't block UI on this
+        fetchProfile(supabase, session.user.id).then((profile) => {
+          if (mounted) {
+            setUser(mapUser(session.user, profile));
+          }
+        });
       } else {
         setUser(null);
       }

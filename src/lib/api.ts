@@ -132,6 +132,35 @@ export async function deleteMessage(
   });
 }
 
+// ── Group Participants ──────────────────────────────
+
+export async function addParticipants(
+  conversationId: string,
+  userIds: string[]
+): Promise<{ participants: { id: string; username: string; displayName: string | null; avatarUrl: string | null }[] }> {
+  return request(
+    `/api/conversations/${encodeURIComponent(conversationId)}/participants`,
+    {
+      method: "POST",
+      body: JSON.stringify({ userIds }),
+    }
+  );
+}
+
+export async function removeParticipant(
+  conversationId: string,
+  userId?: string
+): Promise<void> {
+  const body = userId ? { userId } : {};
+  await request(
+    `/api/conversations/${encodeURIComponent(conversationId)}/participants`,
+    {
+      method: "DELETE",
+      body: JSON.stringify(body),
+    }
+  );
+}
+
 // ── Pin ─────────────────────────────────────────────
 
 export async function togglePin(

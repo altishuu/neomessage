@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+const MAX_CONTENT_LENGTH = 4000;
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createSupabaseServerClient();
@@ -24,9 +26,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (typeof content !== "string" || content.trim().length === 0) {
+    if (typeof content !== "string") {
+      return NextResponse.json(
+        { error: "Content must be a string" },
+        { status: 400 }
+      );
+    }
+
+    const trimmedContent = content.trim();
+
+    if (trimmedContent.length === 0) {
       return NextResponse.json(
         { error: "Content must be a non-empty string" },
+        { status: 400 }
+      );
+    }
+
+    if (trimmedContent.length > MAX_CONTENT_LENGTH) {
+      return NextResponse.json(
+        { error: `Content must be at most ${MAX_CONTENT_LENGTH} characters` },
         { status: 400 }
       );
     }
@@ -53,7 +71,7 @@ export async function POST(request: NextRequest) {
     const { data: message, error: msgError } = await supabase
       .from("messages")
       .insert({
-        content: content.trim(),
+        content: trimmedContent,
         conversation_id: conversationId,
         sender_id: user.id,
         type: "text",

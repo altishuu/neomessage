@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { Reaction } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
+import type { Database } from "@/lib/supabase/types";
+
+type ReactionRow = Database["public"]["Tables"]["message_reactions"]["Row"];
 
 // ── Reactor profile cache ────────────────────────────────────────────────
 // Module-level cache persists across re-renders and conversation switches,
@@ -122,8 +125,8 @@ export function useRealtimeReactions(
         },
         async (payload) => {
           if (!mountedRef.current) return;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const record = payload.new as any;
+          const record = payload.new as ReactionRow | null;
+          if (!record) return;
 
           // Resolve the reactor's profile
           const reactor = await resolveReactor(record.user_id ?? null);
@@ -165,8 +168,8 @@ export function useRealtimeReactions(
         },
         (payload) => {
           if (!mountedRef.current) return;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const oldRecord = payload.old as any;
+          const oldRecord = payload.old as ReactionRow | null;
+          if (!oldRecord) return;
 
           setReactionsByMessage((prev) => {
             const existing = prev[oldRecord.message_id] ?? [];

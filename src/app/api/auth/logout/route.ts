@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient } from "@/lib/supabase/middleware";
 
 // ── DELETE /api/auth/logout ──────────────────────────────────────────────────
 // Signs out the current user by clearing the Supabase auth session and cookies.
+// Uses the middleware-compatible client so cookie clearing propagates to the
+// response object properly (the server-only client can't write response cookies).
 
-export async function DELETE(_request: NextRequest) {
+export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createSupabaseServerClient();
+    const { supabase, supabaseResponse } =
+      createServerSupabaseClient(request);
+
     const { error } = await supabase.auth.signOut();
 
     if (error) {
@@ -15,14 +19,12 @@ export async function DELETE(_request: NextRequest) {
 
     const response = NextResponse.json({ success: true });
 
-    // Clear any leftover Supabase auth cookies
-    response.cookies.set("sb-auth-token", "", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 0,
-      path: "/",
-    });
+    // Propagate any Set-Cookie headers from the intermediate response
+    // (signOut clears the auth cookies via setAll() in the client config)
+    const setCookieHeaders = supabaseResponse.headers.getSetCookie();
+    for (const cookie of setCookieHeaders) {
+      response.headers.append("Set-Cookie", cookie);
+    }
 
     return response;
   } catch (error) {

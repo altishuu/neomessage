@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     const messageContent = textContent || filename;
 
     const fileMetadata = {
-      file_url: uploadData.path,
+      file_url: null, // Will be populated with signed URL after insert
       mime_type: file.type,
       file_size: file.size,
       file_name: filename,
@@ -123,11 +123,27 @@ export async function POST(request: NextRequest) {
       .update({ metadata: updatedMetadata })
       .eq("id", message.id);
 
+    // Fetch the sender profile for the response
+    const { data: senderProfile } = await supabase
+      .from("user_profiles")
+      .select("user_id, username, avatar_url")
+      .eq("user_id", user.id)
+      .single();
+
     return NextResponse.json({
       message: {
         id: message.id,
         type: message.type,
         content: message.content,
+        senderId: message.sender_id,
+        sender: senderProfile
+          ? {
+              id: senderProfile.user_id,
+              username: senderProfile.username,
+              avatarUrl: senderProfile.avatar_url,
+            }
+          : null,
+        conversationId: message.conversation_id,
         metadata: updatedMetadata,
         createdAt: message.created_at,
       },

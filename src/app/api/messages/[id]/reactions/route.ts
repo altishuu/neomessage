@@ -1,19 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
 
-// TODO: Remove `as any` casts once message_reactions is added to Database types
-//       (regenerate via: npx supabase gen types typescript --linked > src/lib/supabase/types.ts)
-
-// ── Local type for reaction rows (mirrors the DB schema) ────────────────────
-type ReactionRecord = {
-  id: string;
-  message_id: string;
-  user_id: string;
-  reaction: string;
-  created_at: string;
-};
 
 // ── Supported emoji reactions ──────────────────────────────────────────────
 const SUPPORTED_REACTIONS = new Set([
@@ -140,8 +128,7 @@ export async function GET(
     if (!access.ok) return access.response;
 
     // Fetch all reactions for this message
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: reactions, error: reactError } = await (supabase as any)
+    const { data: reactions, error: reactError } = await supabase
       .from("message_reactions")
       .select("id, message_id, user_id, reaction, created_at")
       .eq("message_id", messageId)
@@ -149,7 +136,7 @@ export async function GET(
 
     if (reactError) throw reactError;
 
-    const reactionRows = (reactions ?? []) as ReactionRecord[];
+    const reactionRows = reactions ?? [];
 
     // Fetch user profiles for the reactors
     const userIds = [...new Set(reactionRows.map((r) => r.user_id))];
@@ -227,8 +214,7 @@ export async function POST(
     if (!access.ok) return access.response;
 
     // Upsert — ON CONFLICT DO NOTHING makes this idempotent
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: inserted, error: insertError } = await (supabase as any)
+    const { data: inserted, error: insertError } = await supabase
       .from("message_reactions")
       .upsert(
         {
@@ -247,10 +233,9 @@ export async function POST(
     if (insertError) throw insertError;
 
     // If upsert found an existing row instead of inserting, fetch it
-    let reaction = inserted as ReactionRecord | null;
+    let reaction = inserted;
     if (!reaction) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: existing } = await (supabase as any)
+      const { data: existing } = await supabase
         .from("message_reactions")
         .select("id, message_id, user_id, reaction, created_at")
         .eq("message_id", messageId)
@@ -258,7 +243,7 @@ export async function POST(
         .eq("reaction", body.reaction)
         .single();
 
-      reaction = existing as ReactionRecord | null;
+      reaction = existing;
     }
 
     if (!reaction) {
@@ -333,8 +318,7 @@ export async function DELETE(
     }
 
     // Fetch the reaction row to verify ownership before deleting
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: existing, error: fetchError } = await (supabase as any)
+    const { data: existing, error: fetchError } = await supabase
       .from("message_reactions")
       .select("id")
       .eq("message_id", messageId)
@@ -352,8 +336,7 @@ export async function DELETE(
     }
 
     // Delete the reaction (RLS enforces owner-only delete, but we already verified)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: deleteError } = await (supabase as any)
+    const { error: deleteError } = await supabase
       .from("message_reactions")
       .delete()
       .eq("id", existing.id);

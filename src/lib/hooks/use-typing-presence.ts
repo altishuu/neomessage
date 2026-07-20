@@ -87,6 +87,9 @@ export function useTypingPresence(conversationId: string, userId: string): Typin
     };
   }, [conversationId, userId]);
 
+  // Keep stopTyping in a ref so setTimeout always calls the latest version
+  const stopTypingRef = useRef<() => Promise<void>>(async () => {});
+
   const stopTyping = useCallback(async () => {
     if (!channelRef.current) return;
 
@@ -99,6 +102,9 @@ export function useTypingPresence(conversationId: string, userId: string): Typin
       clearTimeout(typingTimeoutRef.current);
     }
   }, [userId]);
+
+  // Sync the latest stopTyping into the ref
+  stopTypingRef.current = stopTyping;
 
   const broadcastTyping = useCallback(async () => {
     if (!channelRef.current) return;
@@ -119,10 +125,11 @@ export function useTypingPresence(conversationId: string, userId: string): Typin
       clearTimeout(typingTimeoutRef.current);
     }
 
+    // Use the ref so the timeout always calls the latest stopTyping
     typingTimeoutRef.current = setTimeout(() => {
-      stopTyping();
+      stopTypingRef.current();
     }, 1500);
-  }, [userId, stopTyping]);
+  }, [userId]);
 
   return {
     typingUsers,
