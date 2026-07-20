@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { Message, Reaction } from "@/lib/types";
@@ -13,6 +13,7 @@ import {
   Download,
   Maximize2,
   X,
+  Loader2,
 } from "lucide-react";
 
 interface MessageListProps {
@@ -99,6 +100,17 @@ export function MessageList({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const { user } = useAuth();
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [loadedImages, setLoadedImages] = useState<Record<string, boolean>>({});
+
+  // ── Lightbox ESC key ────────────────────────────────────────────
+  useEffect(() => {
+    if (!lightboxImage) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightboxImage(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [lightboxImage]);
 
   // Derive message IDs for the reactions hook
   const messageIds = useMemo(() => messages.map((m) => m.id), [messages]);
@@ -252,7 +264,7 @@ export function MessageList({
               {/* ── Attachment Rendering ────────────────────────────── */}
               {msg.type === "image" && (
                 <div
-                  className="relative group/img cursor-pointer overflow-hidden rounded-sm border border-border"
+                  className="relative group/img cursor-pointer overflow-hidden rounded border border-border"
                   onClick={() => {
                     const url = (msg as any).metadata?.signedUrl as
                       | string
@@ -262,6 +274,11 @@ export function MessageList({
                     }
                   }}
                 >
+                  {!loadedImages[msg.id] && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
+                      <Loader2 className="w-6 h-6 text-cyan animate-spin" />
+                    </div>
+                  )}
                   <img
                     src={
                       (msg as any).metadata?.signedUrl ||
@@ -270,6 +287,9 @@ export function MessageList({
                     }
                     alt={msg.content}
                     className="max-w-full max-h-64 object-contain bg-black"
+                    onLoad={() =>
+                      setLoadedImages((prev) => ({ ...prev, [msg.id]: true }))
+                    }
                   />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
                     <Maximize2 className="w-5 h-5 text-white" />
