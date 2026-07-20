@@ -132,6 +132,25 @@ export async function deleteMessage(
   });
 }
 
+// ── Message Search ─────────────────────────────────
+
+export async function searchMessages(
+  conversationId: string,
+  q: string
+): Promise<{ messages: Array<{
+  id: string;
+  conversationId: string;
+  senderId: string | null;
+  content: string;
+  createdAt: string;
+  rank: number;
+  sender: { id: string; username: string; avatarUrl: string | null } | null;
+}> }> {
+  return request(
+    `/api/messages/search?conversationId=${encodeURIComponent(conversationId)}&q=${encodeURIComponent(q)}`
+  );
+}
+
 // ── Group Participants ──────────────────────────────
 
 export async function addParticipants(

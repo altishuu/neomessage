@@ -305,6 +305,24 @@ export type Database = {
           sender_id: string
         }[]
       }
+      search_messages: {
+        Args: {
+          conv_id: string
+          search_query: string
+          max_results?: number
+        }
+        Returns: {
+          id: string
+          conversation_id: string
+          sender_id: string
+          sender_username: string
+          sender_avatar_url: string
+          type: string
+          content: string
+          created_at: string
+          rank: number
+        }[]
+      }
     }
     Enums: {
       message_type: "text" | "system" | "image" | "file"

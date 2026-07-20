@@ -10,6 +10,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { NewConversationModal } from "@/components/chat/new-conversation-modal";
 import { AvatarDropdown } from "@/components/chat/avatar-dropdown";
+import { SearchPanel } from "@/components/chat/search-panel";
 
 function PinIcon({ pinned }: { pinned: boolean }) {
   return (
@@ -49,6 +50,7 @@ export function Sidebar() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNewModal, setShowNewModal] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
 
   const fetchConversations = useCallback(async () => {
     try {
@@ -121,15 +123,37 @@ export function Sidebar() {
               NeoMessage
             </h1>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowNewModal(true)}
-            className="text-text-dim hover:text-cyan"
-          >
-            + New
-          </Button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowSearch((prev) => !prev)}
+              className={cn(
+                "font-mono text-xs px-2 py-1 rounded-sm transition-colors",
+                showSearch
+                  ? "text-cyan bg-cyan/10"
+                  : "text-text-dim hover:text-cyan hover:bg-surface-overlay"
+              )}
+            >
+              {showSearch ? "[x]" : "Search"}
+            </button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowNewModal(true)}
+              className="text-text-dim hover:text-cyan"
+            >
+              + New
+            </Button>
+          </div>
         </div>
+
+        {/* Search panel */}
+        {showSearch && (
+          <SearchPanel
+            conversations={conversations}
+            activeId={activeId}
+            onClose={() => setShowSearch(false)}
+          />
+        )}
 
         {/* Conversation list */}
         <div className="flex-1 overflow-y-auto">
