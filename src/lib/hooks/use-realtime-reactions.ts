@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { Reaction } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
+import { useRealtimeChannel } from "./use-realtime-channel";
 import type { Database } from "@/lib/supabase/types";
 
 type ReactionRow = Database["public"]["Tables"]["message_reactions"]["Row"];
@@ -19,7 +20,7 @@ interface ReactorProfile {
 const reactorCache = new Map<string, ReactorProfile>();
 
 async function resolveReactor(
-  userId: string | null
+  userId: string | null,
 ): Promise<ReactorProfile> {
   // System actors have no user
   if (!userId) {
@@ -66,7 +67,8 @@ async function resolveReactor(
 
 export function useRealtimeReactions(
   conversationId: string,
-  messageIds: string[]
+  messageIds: string[],
+  onReconnected?: () => void,
 ) {
   const [reactionsByMessage, setReactionsByMessage] = useState<
     Record<string, Reaction[]>
@@ -79,7 +81,7 @@ export function useRealtimeReactions(
     mountedRef.current = true;
 
     const pendingIds = messageIds.filter(
-      (id) => !fetchedRef.current.has(id)
+      (id) => !fetchedRef.current.has(id),
     );
     if (pendingIds.length === 0) return;
 
@@ -107,95 +109,86 @@ export function useRealtimeReactions(
     });
   }, [messageIds]);
 
-  // ── Realtime subscription ────────────────────────────────────────────
-  useEffect(() => {
-    mountedRef.current = true;
+  // ── Realtime subscription via shared reconnection hook ────────────────
 
-    const supabase = createClient();
-    const channelName = `reactions:${conversationId}`;
+  const channelName = `reactions:${conversationId}`;
 
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "message_reactions",
-        },
-        async (payload) => {
-          if (!mountedRef.current) return;
-          const record = payload.new as ReactionRow | null;
-          if (!record) return;
+  const { status, error } = useRealtimeChannel(
+    channelName,
+    useCallback(
+      (channel) => {
+        channel
+          .on(
+            "postgres_changes",
+            {
+              event: "INSERT",
+              schema: "public",
+              table: "message_reactions",
+            },
+            async (payload) => {
+              if (!mountedRef.current) return;
+              const record = payload.new as ReactionRow | null;
+              if (!record) return;
 
-          // Resolve the reactor's profile
-          const reactor = await resolveReactor(record.user_id ?? null);
+              // Resolve the reactor's profile
+              const reactor = await resolveReactor(record.user_id ?? null);
 
-          const newReaction: Reaction = {
-            id: record.id,
-            messageId: record.message_id,
-            userId: record.user_id ?? "",
-            reaction: record.reaction,
-            createdAt: record.created_at,
-            user: reactor.id
-              ? {
-                  id: reactor.id,
-                  username: reactor.username,
-                  avatarUrl: reactor.avatarUrl,
-                }
-              : null,
-          };
+              const newReaction: Reaction = {
+                id: record.id,
+                messageId: record.message_id,
+                userId: record.user_id ?? "",
+                reaction: record.reaction,
+                createdAt: record.created_at,
+                user: reactor.id
+                  ? {
+                      id: reactor.id,
+                      username: reactor.username,
+                      avatarUrl: reactor.avatarUrl,
+                    }
+                  : null,
+              };
 
-          if (!mountedRef.current) return;
+              if (!mountedRef.current) return;
 
-          setReactionsByMessage((prev) => {
-            const existing = prev[record.message_id] ?? [];
-            // Deduplicate — realtime may fire before the fetch completes
-            if (existing.some((r) => r.id === newReaction.id)) return prev;
-            return {
-              ...prev,
-              [record.message_id]: [...existing, newReaction],
-            };
-          });
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "DELETE",
-          schema: "public",
-          table: "message_reactions",
-        },
-        (payload) => {
-          if (!mountedRef.current) return;
-          const oldRecord = payload.old as ReactionRow | null;
-          if (!oldRecord) return;
+              setReactionsByMessage((prev) => {
+                const existing = prev[record.message_id] ?? [];
+                // Deduplicate — realtime may fire before the fetch completes
+                if (existing.some((r) => r.id === newReaction.id)) return prev;
+                return {
+                  ...prev,
+                  [record.message_id]: [...existing, newReaction],
+                };
+              });
+            },
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "DELETE",
+              schema: "public",
+              table: "message_reactions",
+            },
+            (payload) => {
+              if (!mountedRef.current) return;
+              const oldRecord = payload.old as ReactionRow | null;
+              if (!oldRecord) return;
 
-          setReactionsByMessage((prev) => {
-            const existing = prev[oldRecord.message_id] ?? [];
-            return {
-              ...prev,
-              [oldRecord.message_id]: existing.filter(
-                (r) => r.id !== oldRecord.id
-              ),
-            };
-          });
-        }
-      )
-      .subscribe((status) => {
-        if (!mountedRef.current) return;
-        // Reactions subscription status is non-critical — don't surface to user
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          console.warn("[reactions] subscription error, will retry automatically");
-        }
-      });
-
-    // ── Cleanup ─────────────────────────────────────────────────────────
-    return () => {
-      mountedRef.current = false;
-      supabase.removeChannel(channel);
-    };
-  }, [conversationId]);
+              setReactionsByMessage((prev) => {
+                const existing = prev[oldRecord.message_id] ?? [];
+                return {
+                  ...prev,
+                  [oldRecord.message_id]: existing.filter(
+                    (r) => r.id !== oldRecord.id,
+                  ),
+                };
+              });
+            },
+          );
+      },
+      [], // No changing dependencies — handlers use refs
+    ),
+    onReconnected,
+  );
 
   // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -203,11 +196,13 @@ export function useRealtimeReactions(
     (messageId: string): Reaction[] => {
       return reactionsByMessage[messageId] ?? [];
     },
-    [reactionsByMessage]
+    [reactionsByMessage],
   );
 
   return {
     reactionsByMessage,
     getMessageReactions,
+    connected: status === "connected",
+    error,
   };
 }

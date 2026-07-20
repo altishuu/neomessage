@@ -3,10 +3,13 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { Message } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
+import { useRealtimeChannel } from "./use-realtime-channel";
 
 interface UseRealtimeMessagesOptions {
   conversationId: string;
   onMessage?: (message: Message) => void;
+  /** Fires when the WebSocket reconnects after a disconnect */
+  onReconnected?: () => void;
 }
 
 // ── Sender profile cache ──────────────────────────────────────────────
@@ -69,10 +72,9 @@ async function resolveSender(
 export function useRealtimeMessages({
   conversationId,
   onMessage,
+  onReconnected,
 }: UseRealtimeMessagesOptions) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [connected, setConnected] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const onMessageRef = useRef(onMessage);
 
@@ -80,6 +82,66 @@ export function useRealtimeMessages({
   useEffect(() => {
     onMessageRef.current = onMessage;
   }, [onMessage]);
+
+  // ── Channel subscription via shared reconnection hook ────────────
+
+  const channelName = `conversation:${conversationId}`;
+
+  const { status, error } = useRealtimeChannel(
+    channelName,
+    useCallback(
+      (channel) => {
+        channel.on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "messages",
+            filter: `conversation_id=eq.${conversationId}`,
+          },
+          async (payload) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const record = payload.new as any;
+            if (!mountedRef.current) return;
+
+            if (payload.eventType === "DELETE") {
+              setMessages((prev) => prev.filter((m) => m.id !== payload.old.id));
+              return;
+            }
+
+            const sender = await resolveSender(record.sender_id ?? null);
+
+            const msg: Message = {
+              id: record.id,
+              content: record.content,
+              senderId: record.sender_id ?? "",
+              sender,
+              type: record.type ?? undefined,
+              conversationId: record.conversation_id,
+              readAt: null,
+              createdAt: record.created_at,
+              updatedAt: record.updated_at,
+              deletedAt: record.deleted_at ?? null,
+              metadata: record.metadata ?? undefined,
+            };
+
+            if (mountedRef.current) {
+              setMessages((prev) => {
+                if (payload.eventType === "UPDATE") {
+                  return prev.map((m) => (m.id === msg.id ? msg : m));
+                }
+                if (prev.some((m) => m.id === msg.id)) return prev;
+                return [...prev, msg];
+              });
+              onMessageRef.current?.(msg);
+            }
+          },
+        );
+      },
+      [conversationId],
+    ),
+    onReconnected,
+  );
 
   // ── Public API ────────────────────────────────────────────────────
 
@@ -94,91 +156,9 @@ export function useRealtimeMessages({
     setMessages(msgs);
   }, []);
 
-  // ── Subscription ──────────────────────────────────────────────────
-
-  useEffect(() => {
-    mountedRef.current = true;
-
-    const supabase = createClient();
-    const channelName = `conversation:${conversationId}`;
-
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "messages",
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        async (payload) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const record = payload.new as any;
-          if (!mountedRef.current) return;
-
-          if (payload.eventType === 'DELETE') {
-             setMessages((prev) => prev.filter(m => m.id !== payload.old.id));
-             return;
-          }
-
-          const sender = await resolveSender(record.sender_id ?? null);
-
-          const msg: Message = {
-            id: record.id,
-            content: record.content,
-            senderId: record.sender_id ?? "",
-            sender,
-            type: record.type ?? undefined,
-            conversationId: record.conversation_id,
-            readAt: null,
-            createdAt: record.created_at,
-            updatedAt: record.updated_at,
-            deletedAt: record.deleted_at ?? null,
-            metadata: record.metadata ?? undefined,
-          };
-
-          if (mountedRef.current) {
-            setMessages((prev) => {
-              if (payload.eventType === 'UPDATE') {
-                  return prev.map(m => m.id === msg.id ? msg : m);
-              }
-              if (prev.some((m) => m.id === msg.id)) return prev;
-              return [...prev, msg];
-            });
-            onMessageRef.current?.(msg);
-          }
-        }
-      )
-      .subscribe((status) => {
-        if (!mountedRef.current) return;
-
-        switch (status) {
-          case "SUBSCRIBED":
-            setConnected(true);
-            setError(null);
-            break;
-          case "CHANNEL_ERROR":
-          case "TIMED_OUT":
-            setConnected(false);
-            setError("Connection lost, reconnecting...");
-            break;
-          case "CLOSED":
-            setConnected(false);
-            break;
-        }
-      });
-
-    // ── Cleanup ───────────────────────────────────────────────────
-    return () => {
-      mountedRef.current = false;
-      supabase.removeChannel(channel);
-    };
-  }, [conversationId]);
-
   return {
     messages,
-    connected,
+    connected: status === "connected",
     error,
     addMessage,
     setInitialMessages,

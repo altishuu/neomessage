@@ -11,6 +11,7 @@ import { MessageList } from "@/components/chat/message-list";
 import ChatInputContainer from "@/components/chat/chat-input-container";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import type { Conversation, User } from "@/lib/types";
 
@@ -33,6 +34,7 @@ export default function ConversationPage() {
   const [addSearching, setAddSearching] = useState(false);
   const [addSearchError, setAddSearchError] = useState<string | null>(null);
   const [addingUsers, setAddingUsers] = useState(false);
+  const [showReconnected, setShowReconnected] = useState(false);
 
   const {
     messages,
@@ -45,6 +47,9 @@ export default function ConversationPage() {
     onMessage: () => {
       // Messages already added by the hook
     },
+    onReconnected: useCallback(() => {
+      setShowReconnected(true);
+    }, []),
   });
 
   // ── Typing presence ──────────────────────────────────────────────
@@ -250,10 +255,19 @@ export default function ConversationPage() {
       {/* Realtime connection status */}
       {!connected && (
         <div className="px-4 py-1.5 bg-amber/10 border-b border-amber/30">
-          <p className="font-mono text-[10px] text-amber text-center">
-            {realtimeError || "~$ reconnecting..."}
+          <p className="font-mono text-[10px] text-amber text-center animate-pulse">
+            ~$ Connection lost — reconnecting...
           </p>
         </div>
+      )}
+
+      {/* Reconnected toast */}
+      {showReconnected && (
+        <Toast
+          message="Reconnected"
+          type="success"
+          onDismiss={() => setShowReconnected(false)}
+        />
       )}
 
       {/* Messages */}
