@@ -11,6 +11,7 @@ interface ConversationHeaderProps {
   typingUsers?: string[];
   onAddParticipants?: () => void;
   onLeaveGroup?: () => void;
+  onDeleteConversation?: () => void;
 }
 
 export function ConversationHeader({
@@ -19,6 +20,7 @@ export function ConversationHeader({
   typingUsers = [],
   onAddParticipants,
   onLeaveGroup,
+  onDeleteConversation,
 }: ConversationHeaderProps) {
   const { user } = useAuth();
   const [showMenu, setShowMenu] = useState(false);
@@ -43,6 +45,8 @@ export function ConversationHeader({
       : othersTyping.length > 1
         ? "several users"
         : "";
+
+  const showMenuButton = onDeleteConversation || onLeaveGroup;
 
   return (
     <header className="flex items-center gap-3 px-4 py-3 border-b border-border bg-surface-raised flex-shrink-0">
@@ -81,8 +85,8 @@ export function ConversationHeader({
           </span>
         )}
 
-        {/* Dropdown menu for group actions */}
-        {isGroup && onAddParticipants && onLeaveGroup && (
+        {/* Dropdown menu */}
+        {showMenuButton && (
           <div className="relative">
             <button
               onClick={() => setShowMenu((prev) => !prev)}
@@ -97,24 +101,39 @@ export function ConversationHeader({
                   onClick={() => setShowMenu(false)}
                 />
                 <div className="absolute right-0 top-full mt-1 z-20 bg-surface-raised border border-border rounded-sm shadow-lg min-w-[140px] py-1">
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      onAddParticipants();
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-left font-mono text-[11px] text-text hover:bg-surface transition-colors"
-                  >
-                    + Add people
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      onLeaveGroup();
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-left font-mono text-[11px] text-red hover:bg-surface transition-colors"
-                  >
-                    - Leave group
-                  </button>
+                  {onAddParticipants && (
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        onAddParticipants();
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left font-mono text-[11px] text-text hover:bg-surface transition-colors"
+                    >
+                      + Add people
+                    </button>
+                  )}
+                  {onLeaveGroup && (
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        onLeaveGroup();
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left font-mono text-[11px] text-red hover:bg-surface transition-colors"
+                    >
+                      - Leave group
+                    </button>
+                  )}
+                  {onDeleteConversation && (
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        onDeleteConversation();
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left font-mono text-[11px] text-red hover:bg-surface transition-colors"
+                    >
+                      x Delete conversation
+                    </button>
+                  )}
                 </div>
               </>
             )}

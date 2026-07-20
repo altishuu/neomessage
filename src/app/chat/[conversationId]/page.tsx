@@ -2,14 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getConversation, sendMessage, addParticipants, removeParticipant } from "@/lib/api";
+import { getConversation, sendMessage, addParticipants, removeParticipant, deleteConversation, searchUsers } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useRealtimeMessages } from "@/lib/hooks/use-realtime-messages";
 import { useTypingPresence } from "@/lib/hooks/use-typing-presence";
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { MessageList } from "@/components/chat/message-list";
 import ChatInputContainer from "@/components/chat/chat-input-container";
-import { searchUsers } from "@/lib/api";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -28,6 +27,7 @@ export default function ConversationPage() {
   const [sendError, setSendError] = useState<string | null>(null);
   const [showAddParticipants, setShowAddParticipants] = useState(false);
   const [showConfirmLeave, setShowConfirmLeave] = useState(false);
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [addSearchQuery, setAddSearchQuery] = useState("");
   const [addSearchResults, setAddSearchResults] = useState<User[]>([]);
   const [addSearching, setAddSearching] = useState(false);
@@ -183,6 +183,16 @@ export default function ConversationPage() {
     }
   }, [conversation, router]);
 
+  const handleDeleteConversation = useCallback(async () => {
+    if (!conversation) return;
+    try {
+      await deleteConversation(conversation.id);
+      router.push("/chat");
+    } catch (err) {
+      console.error("Failed to delete conversation:", err);
+    }
+  }, [conversation, router]);
+
   // Loading state
   if (loading) {
     return (
@@ -231,6 +241,9 @@ export default function ConversationPage() {
           conversation.isGroup
             ? () => setShowConfirmLeave(true)
             : undefined
+        }
+        onDeleteConversation={
+          () => setShowConfirmDelete(true)
         }
       />
 
@@ -397,6 +410,45 @@ export default function ConversationPage() {
                 className="!text-red !border-red/30 hover:!bg-red/10"
               >
                 Leave
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete conversation confirmation */}
+      {showConfirmDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-surface/80 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowConfirmDelete(false);
+          }}
+        >
+          <div className="w-full max-w-sm bg-surface-raised border border-border rounded-sm shadow-2xl p-6">
+            <h3 className="font-mono text-sm font-bold text-text mb-2">
+              ~$ Delete conversation?
+            </h3>
+            <p className="font-mono text-xs text-text-dim mb-6">
+              This will remove the conversation from your sidebar. Other participants will not be affected.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowConfirmDelete(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setShowConfirmDelete(false);
+                  handleDeleteConversation();
+                }}
+                className="!text-red !border-red/30 hover:!bg-red/10"
+              >
+                Delete
               </Button>
             </div>
           </div>
