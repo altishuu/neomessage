@@ -132,6 +132,16 @@ export async function deleteMessage(
   });
 }
 
+// ── Conversation Deletion ─────────────────────────
+
+export async function deleteConversation(
+  conversationId: string
+): Promise<void> {
+  await request(`/api/conversations/${encodeURIComponent(conversationId)}`, {
+    method: "DELETE",
+  });
+}
+
 // ── Read Receipts ──────────────────────────────────
 
 export async function markConversationRead(

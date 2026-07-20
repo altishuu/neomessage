@@ -149,3 +149,62 @@ export async function GET(
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+// ── DELETE /api/conversations/[id] ─────────────────────────────────────────
+// Soft-delete a conversation for the current user (set deleted_at on participant)
+// The conversation itself stays for other participants.
+
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const supabase = await createSupabaseServerClient();
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id } = await params;
+
+    // Verify user is an active participant
+    const { data: participant, error: partError } = await supabase
+      .from("conversation_participants")
+      .select("id")
+      .eq("conversation_id", id)
+      .eq("user_id", user.id)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (partError) throw partError;
+
+    if (!participant) {
+      return NextResponse.json(
+        { error: "Conversation not found or access denied" },
+        { status: 404 }
+      );
+    }
+
+    // Soft-delete this user's participation
+    const now = new Date().toISOString();
+    const { error: updateError } = await supabase
+      .from("conversation_participants")
+      .update({ deleted_at: now })
+      .eq("id", participant.id);
+
+    if (updateError) throw updateError;
+
+    return new NextResponse(null, { status: 204 });
+  } catch (error) {
+    console.error("Delete conversation error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
