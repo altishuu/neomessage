@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { getConversations, togglePin } from "@/lib/api";
+import { getConversations, togglePin, markConversationRead, getUnreadCounts } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import type { Conversation } from "@/lib/types";
@@ -51,6 +51,7 @@ export function Sidebar() {
   const [loading, setLoading] = useState(true);
   const [showNewModal, setShowNewModal] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
 
   const fetchConversations = useCallback(async () => {
     try {
@@ -79,6 +80,44 @@ export function Sidebar() {
     },
     [router]
   );
+
+  // Fetch unread counts periodically and on activeId change
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchUnread = async () => {
+      try {
+        const data = await getUnreadCounts();
+        const map: Record<string, number> = {};
+        for (const item of data) {
+          map[item.conversation_id] = item.unread_count;
+        }
+        setUnreadCounts(map);
+      } catch {
+        // silently handle
+      }
+    };
+
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 15000);
+    return () => clearInterval(interval);
+  }, [user, activeId]);
+
+  // Mark active conversation as read when it changes
+  useEffect(() => {
+    if (activeId && user) {
+      markConversationRead(activeId).catch(() => {});
+      // Optimistically clear the badge
+      setUnreadCounts((prev) => {
+        if (prev[activeId]) {
+          const next = { ...prev };
+          delete next[activeId];
+          return next;
+        }
+        return prev;
+      });
+    }
+  }, [activeId, user]);
 
   // Client-side sort: pinned first, then by lastMessageAt desc
   const sortedConversations = useMemo(() => {
@@ -225,6 +264,14 @@ export function Sidebar() {
                           {displayName}
                         </span>
                         <div className="flex items-center gap-1.5 flex-shrink-0">
+                          {/* Unread badge */}
+                          {unreadCounts[conv.id] && !isActive && (
+                            <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-sm bg-cyan text-[9px] font-mono font-bold text-surface">
+                              {unreadCounts[conv.id] > 99
+                                ? "99+"
+                                : unreadCounts[conv.id]}
+                            </span>
+                          )}
                           {/* Pin toggle — always visible when pinned, on hover when unpinned */}
                           <span
                             onClick={(e) => {

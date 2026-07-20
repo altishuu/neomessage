@@ -305,6 +305,13 @@ export type Database = {
           sender_id: string
         }[]
       }
+      get_unread_counts: {
+        Args: { p_user_id: string }
+        Returns: {
+          conversation_id: string
+          unread_count: number
+        }[]
+      }
       search_messages: {
         Args: {
           conv_id: string

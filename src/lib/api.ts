@@ -132,6 +132,23 @@ export async function deleteMessage(
   });
 }
 
+// ── Read Receipts ──────────────────────────────────
+
+export async function markConversationRead(
+  conversationId: string
+): Promise<{ lastReadAt: string }> {
+  return request("/api/messages/read", {
+    method: "PATCH",
+    body: JSON.stringify({ conversationId }),
+  });
+}
+
+export async function getUnreadCounts(): Promise<
+  Array<{ conversation_id: string; unread_count: number }>
+> {
+  return request("/api/messages/unread");
+}
+
 // ── Message Search ─────────────────────────────────
 
 export async function searchMessages(
