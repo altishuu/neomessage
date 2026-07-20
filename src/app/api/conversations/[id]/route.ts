@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -36,6 +36,12 @@ export async function GET(
         { status: 404 }
       );
     }
+
+    // ── Cursor-based pagination for messages ──────────────────────
+    const { searchParams } = new URL(request.url);
+    const cursor = searchParams.get("cursor"); // ISO timestamp of oldest loaded msg
+    const limitParam = searchParams.get("limit");
+    const pageLimit = Math.min(Math.max(parseInt(limitParam || "50", 10) || 50, 1), 200);
 
     // Fetch the conversation
     const { data: conversation, error: convError } = await supabase
@@ -73,16 +79,36 @@ export async function GET(
       (profiles ?? []).map((p) => [p.user_id, p])
     );
 
-    // Fetch recent messages (last 50)
-    const { data: messages, error: msgError } = await supabase
+    // Fetch messages with cursor-based pagination
+    const pageSize = pageLimit + 1; // Fetch 1 extra to detect hasMore
+    let msgQuery = supabase
       .from("messages")
       .select("*")
       .eq("conversation_id", id)
       .is("deleted_at", null)
-      .order("created_at", { ascending: true })
-      .limit(50);
+      .order("created_at", { ascending: false })
+      .limit(pageSize);
+
+    if (cursor) {
+      msgQuery = msgQuery.lt("created_at", cursor);
+    }
+
+    const { data: messages, error: msgError } = await msgQuery;
 
     if (msgError) throw msgError;
+
+    const hasMore = (messages?.length ?? 0) > pageLimit;
+    const pageMessages = hasMore
+      ? (messages ?? []).slice(0, pageLimit)
+      : (messages ?? []);
+
+    // Return messages in chronological order for rendering
+    pageMessages.reverse();
+
+    const nextCursor =
+      pageMessages.length > 0
+        ? pageMessages[0].created_at
+        : null;
 
     // Fetch sender profiles for messages
     const senderIds = [
@@ -119,7 +145,7 @@ export async function GET(
             avatarUrl: prof?.avatar_url ?? null,
           };
         }),
-        messages: (messages ?? []).map((m) => {
+        messages: (pageMessages ?? []).map((m) => {
           const sender = m.sender_id
             ? senderProfileMap.get(m.sender_id) ?? null
             : null;
@@ -142,6 +168,10 @@ export async function GET(
             metadata: m.metadata,
           };
         }),
+      },
+      pagination: {
+        hasMore,
+        nextCursor,
       },
     });
   } catch (error) {
