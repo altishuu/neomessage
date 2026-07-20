@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordStrength } from "@/components/ui/password-strength";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -105,6 +106,8 @@ export default function RegisterPage() {
             autoComplete="new-password"
             showPasswordToggle
           />
+
+          <PasswordStrength password={password} />
 
           <Input
             id="confirmPassword"
