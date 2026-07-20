@@ -18,6 +18,7 @@ function mapUser(
     username: string;
     display_name: string | null;
     avatar_url: string | null;
+    avatar_updated_at: string | null;
   } | null,
 ): User {
   const username =
@@ -36,6 +37,7 @@ function mapUser(
       profile?.avatar_url ??
       (supabaseUser.user_metadata?.avatar_url as string | null) ??
       null,
+    avatarUpdatedAt: profile?.avatar_updated_at ?? null,
   };
 }
 
@@ -65,7 +67,7 @@ async function fetchProfile(
 ) {
   const { data } = await supabase
     .from("user_profiles")
-    .select("username, display_name, avatar_url")
+    .select("username, display_name, avatar_url, avatar_updated_at")
     .eq("user_id", userId)
     .maybeSingle();
   return data;

@@ -24,7 +24,7 @@ export async function GET(
 
     const { data: profile, error } = await supabase
       .from("public_user_profiles")
-      .select("user_id, username, display_name, avatar_url")
+      .select("user_id, username, display_name, avatar_url, avatar_updated_at")
       .eq("user_id", id)
       .maybeSingle();
 
@@ -46,6 +46,7 @@ export async function GET(
         username: profile.username,
         displayName: profile.display_name,
         avatarUrl: profile.avatar_url ?? null,
+        avatarUpdatedAt: profile.avatar_updated_at ?? null,
       },
     });
   } catch (error) {

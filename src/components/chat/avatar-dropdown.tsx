@@ -59,6 +59,7 @@ export function AvatarDropdown() {
         <Avatar
           username={user.displayName ?? user.username}
           avatarUrl={user.avatarUrl}
+          avatarUpdatedAt={user.avatarUpdatedAt}
           size="sm"
         />
         <span className="font-mono text-xs text-text-dim hidden sm:inline max-w-[100px] truncate">

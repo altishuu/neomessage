@@ -290,6 +290,7 @@ export function NewConversationModal({
                     <Avatar
                       username={user.username}
                       avatarUrl={user.avatarUrl}
+                      avatarUpdatedAt={user.avatarUpdatedAt}
                       size="md"
                     />
                     <div className="flex-1 min-w-0">

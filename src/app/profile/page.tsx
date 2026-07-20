@@ -225,6 +225,7 @@ export default function ProfilePage() {
               <Avatar
                 username={profile.displayName ?? profile.username}
                 avatarUrl={profile.avatarUrl}
+                avatarUpdatedAt={profile.avatarUpdatedAt}
                 size="lg"
                 className="w-24 h-24 text-2xl"
               />

@@ -17,7 +17,7 @@ export async function GET(_request: NextRequest) {
     // Fetch the user's profile
     const { data: profile } = await supabase
       .from("user_profiles")
-      .select("id, user_id, username, display_name, avatar_url, created_at")
+      .select("id, user_id, username, display_name, avatar_url, avatar_updated_at, created_at")
       .eq("user_id", user.id)
       .single();
 
@@ -28,6 +28,7 @@ export async function GET(_request: NextRequest) {
         username: profile?.username ?? "",
         displayName: profile?.display_name ?? "",
         avatarUrl: profile?.avatar_url ?? null,
+        avatarUpdatedAt: profile?.avatar_updated_at ?? null,
         createdAt: profile?.created_at ?? user.created_at,
       },
     });

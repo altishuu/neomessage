@@ -167,7 +167,7 @@ export async function POST(
     // Fetch profiles of newly added users for response
     const { data: newProfiles } = await supabase
       .from("user_profiles")
-      .select("user_id, username, display_name, avatar_url")
+      .select("user_id, username, display_name, avatar_url, avatar_updated_at")
       .in("user_id", newUserIds);
 
     return NextResponse.json({
@@ -176,6 +176,7 @@ export async function POST(
         username: p.username,
         displayName: p.display_name,
         avatarUrl: p.avatar_url,
+        avatarUpdatedAt: p.avatar_updated_at ?? null,
       })),
     });
   } catch (error) {

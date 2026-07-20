@@ -57,7 +57,7 @@ export async function GET(_request: NextRequest) {
 
     const { data: profiles, error: profError } = await supabase
       .from("user_profiles")
-      .select("user_id, username, display_name, avatar_url")
+      .select("user_id, username, display_name, avatar_url, avatar_updated_at")
       .in("user_id", userIds);
 
     if (profError) throw profError;
@@ -89,7 +89,7 @@ export async function GET(_request: NextRequest) {
     ];
     const { data: senderProfiles } = await supabase
       .from("user_profiles")
-      .select("user_id, username, avatar_url")
+      .select("user_id, username, avatar_url, avatar_updated_at")
       .in("user_id", senderIds);
 
     const senderProfileMap = new Map(
@@ -133,6 +133,7 @@ export async function GET(_request: NextRequest) {
               email: null, // Not exposed to protect privacy — use profile info
               displayName: prof?.display_name ?? prof?.username ?? "Unknown",
               avatarUrl: prof?.avatar_url ?? null,
+              avatarUpdatedAt: prof?.avatar_updated_at ?? null,
             };
           }),
           lastMessage: lastMsg
@@ -145,6 +146,7 @@ export async function GET(_request: NextRequest) {
                       id: lastSender.user_id,
                       username: lastSender.username,
                       avatarUrl: lastSender.avatar_url,
+                      avatarUpdatedAt: lastSender.avatar_updated_at ?? null,
                     }
                   : null,
                 conversationId: lastMsg.conversation_id,
@@ -274,7 +276,7 @@ export async function POST(request: NextRequest) {
 
             const { data: convProfiles } = await supabase
               .from("user_profiles")
-              .select("user_id, username, display_name, avatar_url")
+              .select("user_id, username, display_name, avatar_url, avatar_updated_at")
               .in(
                 "user_id",
                 (convParticipants ?? []).map((p) => p.user_id),
@@ -293,6 +295,7 @@ export async function POST(request: NextRequest) {
                   email: null,
                   displayName: p.display_name,
                   avatarUrl: p.avatar_url,
+                  avatarUpdatedAt: p.avatar_updated_at ?? null,
                 })),
                 lastMessage: null,
               },
@@ -329,7 +332,7 @@ export async function POST(request: NextRequest) {
     // Fetch profiles for the response
     const { data: newProfiles } = await supabase
       .from("user_profiles")
-      .select("user_id, username, display_name, avatar_url")
+      .select("user_id, username, display_name, avatar_url, avatar_updated_at")
       .in("user_id", allParticipantIds);
 
     return NextResponse.json(
@@ -346,6 +349,7 @@ export async function POST(request: NextRequest) {
             email: null,
             displayName: p.display_name,
             avatarUrl: p.avatar_url,
+            avatarUpdatedAt: p.avatar_updated_at ?? null,
           })),
           lastMessage: null,
         },

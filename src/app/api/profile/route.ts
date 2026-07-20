@@ -5,13 +5,14 @@ import type { TablesUpdate } from "@/lib/supabase/types";
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const PROFILE_SELECT =
-  "user_id, username, display_name, avatar_url, created_at";
+  "user_id, username, display_name, avatar_url, avatar_updated_at, created_at";
 
 function mapProfile(p: {
   user_id: string;
   username: string;
   display_name: string | null;
   avatar_url: string | null;
+  avatar_updated_at: string | null;
   created_at: string;
 }) {
   return {
@@ -19,6 +20,7 @@ function mapProfile(p: {
     username: p.username,
     displayName: p.display_name ?? p.username,
     avatarUrl: p.avatar_url ?? null,
+    avatarUpdatedAt: p.avatar_updated_at ?? null,
     createdAt: p.created_at,
   };
 }
@@ -29,6 +31,7 @@ function mapProfileWithEmail(
     username: string;
     display_name: string | null;
     avatar_url: string | null;
+    avatar_updated_at: string | null;
     created_at: string;
   },
   email: string,
@@ -39,6 +42,7 @@ function mapProfileWithEmail(
     username: p.username,
     displayName: p.display_name ?? p.username,
     avatarUrl: p.avatar_url ?? null,
+    avatarUpdatedAt: p.avatar_updated_at ?? null,
     createdAt: p.created_at,
   };
 }
@@ -147,6 +151,7 @@ export async function PATCH(request: NextRequest) {
         );
       }
       updateData.avatar_url = avatarUrl;
+      updateData.avatar_updated_at = new Date().toISOString();
     }
 
     const { data: profile, error: updateError } = await supabase

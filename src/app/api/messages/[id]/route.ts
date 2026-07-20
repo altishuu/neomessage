@@ -93,7 +93,7 @@ export async function PATCH(
     // Fetch the sender profile
     const { data: senderProfile } = await supabase
       .from("user_profiles")
-      .select("user_id, username, avatar_url")
+      .select("user_id, username, avatar_url, avatar_updated_at")
       .eq("user_id", updatedMessage.sender_id ?? "")
       .maybeSingle();
 
@@ -107,6 +107,7 @@ export async function PATCH(
               id: senderProfile.user_id,
               username: senderProfile.username,
               avatarUrl: senderProfile.avatar_url,
+              avatarUpdatedAt: senderProfile.avatar_updated_at ?? null,
             }
           : null,
         type: updatedMessage.type,

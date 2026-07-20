@@ -159,6 +159,7 @@ export default function ConversationPage() {
                 email: null,
                 displayName: newParticipant.displayName ?? undefined,
                 avatarUrl: newParticipant.avatarUrl,
+                avatarUpdatedAt: newParticipant.avatarUpdatedAt ?? null,
               },
             ],
           };
@@ -363,6 +364,7 @@ export default function ConversationPage() {
                       <Avatar
                         username={u.username}
                         avatarUrl={u.avatarUrl}
+                        avatarUpdatedAt={u.avatarUpdatedAt}
                         size="md"
                       />
                       <div className="flex-1 min-w-0">

@@ -4,6 +4,7 @@ export interface User {
   username: string;
   displayName?: string;
   avatarUrl: string | null;
+  avatarUpdatedAt?: string | null;
   createdAt?: string;
 }
 
@@ -26,6 +27,7 @@ export interface Participant {
   email: string | null;
   displayName?: string;
   avatarUrl: string | null;
+  avatarUpdatedAt?: string | null;
 }
 
 export interface Reaction {
@@ -34,14 +36,14 @@ export interface Reaction {
   userId: string;
   reaction: string;
   createdAt: string;
-  user: { id: string; username: string; avatarUrl: string | null } | null;
+  user: { id: string; username: string; avatarUrl: string | null; avatarUpdatedAt?: string | null } | null;
 }
 
 export interface Message {
   id: string;
   content: string;
   senderId: string | null;
-  sender: { id: string; username: string; avatarUrl: string | null } | null;
+  sender: { id: string; username: string; avatarUrl: string | null; avatarUpdatedAt?: string | null } | null;
   type?: string;
   conversationId: string;
   readAt?: string | null;

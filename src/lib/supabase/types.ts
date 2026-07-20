@@ -246,6 +246,7 @@ export type Database = {
       user_profiles: {
         Row: {
           avatar_url: string | null
+          avatar_updated_at: string | null
           created_at: string
           display_name: string
           id: string
@@ -254,6 +255,7 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
+          avatar_updated_at?: string | null
           created_at?: string
           display_name: string
           id?: string
@@ -262,6 +264,7 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
+          avatar_updated_at?: string | null
           created_at?: string
           display_name?: string
           id?: string
@@ -275,18 +278,21 @@ export type Database = {
       public_user_profiles: {
         Row: {
           avatar_url: string | null
+          avatar_updated_at: string | null
           display_name: string | null
           user_id: string | null
           username: string | null
         }
         Insert: {
           avatar_url?: string | null
+          avatar_updated_at?: string | null
           display_name?: string | null
           user_id?: string | null
           username?: string | null
         }
         Update: {
           avatar_url?: string | null
+          avatar_updated_at?: string | null
           display_name?: string | null
           user_id?: string | null
           username?: string | null

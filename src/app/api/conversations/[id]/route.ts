@@ -72,7 +72,7 @@ export async function GET(
     // Fetch user profiles for participants
     const { data: profiles } = await supabase
       .from("user_profiles")
-      .select("user_id, username, display_name, avatar_url")
+      .select("user_id, username, display_name, avatar_url, avatar_updated_at")
       .in("user_id", userIds);
 
     const profileMap = new Map(
@@ -120,7 +120,7 @@ export async function GET(
     ];
     const { data: senderProfiles } = await supabase
       .from("user_profiles")
-      .select("user_id, username, avatar_url")
+      .select("user_id, username, avatar_url, avatar_updated_at")
       .in("user_id", senderIds);
 
     const senderProfileMap = new Map(
@@ -143,6 +143,7 @@ export async function GET(
             email: null,
             displayName: prof?.display_name ?? prof?.username ?? "Unknown",
             avatarUrl: prof?.avatar_url ?? null,
+            avatarUpdatedAt: prof?.avatar_updated_at ?? null,
           };
         }),
         messages: (pageMessages ?? []).map((m) => {
@@ -158,6 +159,7 @@ export async function GET(
                   id: sender.user_id,
                   username: sender.username,
                   avatarUrl: sender.avatar_url,
+                  avatarUpdatedAt: sender.avatar_updated_at ?? null,
                 }
               : null,
             type: m.type,

@@ -93,12 +93,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update user_profiles with new avatar_url
+    // Update user_profiles with new avatar_url and update timestamp
     const { data: updatedProfile, error: updateError } = await supabase
       .from("user_profiles")
-      .update({ avatar_url: avatarUrl })
+      .update({ avatar_url: avatarUrl, avatar_updated_at: new Date().toISOString() })
       .eq("user_id", user.id)
-      .select("user_id, username, display_name, avatar_url, created_at")
+      .select("user_id, username, display_name, avatar_url, avatar_updated_at, created_at")
       .single();
 
     if (updateError) {
@@ -115,6 +115,7 @@ export async function POST(request: NextRequest) {
         username: updatedProfile.username,
         displayName: updatedProfile.display_name ?? updatedProfile.username,
         avatarUrl: updatedProfile.avatar_url ?? null,
+        avatarUpdatedAt: updatedProfile.avatar_updated_at ?? null,
         createdAt: updatedProfile.created_at,
       },
       avatarUrl,

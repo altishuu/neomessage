@@ -143,7 +143,7 @@ export async function GET(
 
     const { data: profiles } = await supabase
       .from("user_profiles")
-      .select("user_id, username, avatar_url")
+      .select("user_id, username, avatar_url, avatar_updated_at")
       .in("user_id", userIds);
 
     const profileMap = new Map(
@@ -164,6 +164,7 @@ export async function GET(
                 id: profile.user_id,
                 username: profile.username,
                 avatarUrl: profile.avatar_url,
+                avatarUpdatedAt: profile.avatar_updated_at ?? null,
               }
             : null,
         };
@@ -253,7 +254,7 @@ export async function POST(
     // Fetch user profile
     const { data: profile } = await supabase
       .from("user_profiles")
-      .select("user_id, username, avatar_url")
+      .select("user_id, username, avatar_url, avatar_updated_at")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -270,6 +271,7 @@ export async function POST(
                 id: profile.user_id,
                 username: profile.username,
                 avatarUrl: profile.avatar_url,
+                avatarUpdatedAt: profile.avatar_updated_at ?? null,
               }
             : null,
         },

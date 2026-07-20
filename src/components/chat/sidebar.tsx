@@ -251,6 +251,7 @@ export function Sidebar() {
                     <Avatar
                       username={displayName}
                       avatarUrl={other?.avatarUrl}
+                      avatarUpdatedAt={other?.avatarUpdatedAt}
                       size="md"
                     />
                     <div className="flex-1 min-w-0">

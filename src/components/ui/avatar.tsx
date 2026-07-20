@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 interface AvatarProps {
   username: string;
   avatarUrl?: string | null;
+  avatarUpdatedAt?: string | null;
   size?: "sm" | "md" | "lg";
   className?: string;
 }
@@ -43,13 +44,20 @@ function getColorClass(name: string): string {
 export function Avatar({
   username,
   avatarUrl,
+  avatarUpdatedAt,
   size = "md",
   className,
 }: AvatarProps) {
-  if (avatarUrl) {
+  // Build cache-busted URL when avatar_updated_at is available
+  const src =
+    avatarUrl && avatarUpdatedAt
+      ? `${avatarUrl}${avatarUrl.includes("?") ? "&" : "?"}t=${new Date(avatarUpdatedAt).getTime()}`
+      : avatarUrl;
+
+  if (src) {
     return (
       <img
-        src={avatarUrl}
+        src={src}
         alt={username}
         className={cn(
           "rounded-sm object-cover flex-shrink-0",

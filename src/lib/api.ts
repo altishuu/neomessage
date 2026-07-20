@@ -183,7 +183,7 @@ export async function searchMessages(
 export async function addParticipants(
   conversationId: string,
   userIds: string[]
-): Promise<{ participants: { id: string; username: string; displayName: string | null; avatarUrl: string | null }[] }> {
+): Promise<{ participants: { id: string; username: string; displayName: string | null; avatarUrl: string | null; avatarUpdatedAt: string | null }[] }> {
   return request(
     `/api/conversations/${encodeURIComponent(conversationId)}/participants`,
     {

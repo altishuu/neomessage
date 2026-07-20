@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     // Use the public_user_profiles view (exposes only public columns by design)
     const { data: profiles, error: profError } = await supabase
       .from("public_user_profiles")
-      .select("user_id, username, display_name, avatar_url")
+      .select("user_id, username, display_name, avatar_url, avatar_updated_at")
       .neq("user_id", user.id)
       .or(`username.ilike.%${q}%,display_name.ilike.%${q}%`)
       .limit(20);
@@ -57,6 +57,7 @@ export async function GET(request: NextRequest) {
       username: p.username,
       displayName: p.display_name,
       avatarUrl: p.avatar_url,
+      avatarUpdatedAt: p.avatar_updated_at ?? null,
     }));
 
     const response = NextResponse.json({ users }, { status: 200 });
