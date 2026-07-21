@@ -321,17 +321,30 @@ export async function POST(request: NextRequest) {
 
     if (createError) throw createError;
 
-    // Add participants
-    const participantRows = allParticipantIds.map((uid) => ({
-      conversation_id: convId,
-      user_id: uid,
-    }));
-
-    const { error: partInsertError } = await supabase
+    // Add participants — split inserts to avoid RLS issue where
+    // the INSERT policy's subquery can't see rows from the same batch.
+    // Insert self first (succeeds via auth.uid() = user_id check),
+    // then insert other participants (succeeds via exists subquery
+    // seeing our row from the first insert).
+    const { error: partSelfError } = await supabase
       .from("conversation_participants")
-      .insert(participantRows);
+      .insert({
+        conversation_id: convId,
+        user_id: user.id,
+      });
 
-    if (partInsertError) throw partInsertError;
+    if (partSelfError) throw partSelfError;
+
+    for (const uid of allParticipantIds) {
+      if (uid === user.id) continue;
+      const { error: partOtherError } = await supabase
+        .from("conversation_participants")
+        .insert({
+          conversation_id: convId,
+          user_id: uid,
+        });
+      if (partOtherError) throw partOtherError;
+    }
 
     // Fetch the created conversation (now that we're a participant, RLS allows it)
     const { data: conversation, error: fetchError } = await supabase
