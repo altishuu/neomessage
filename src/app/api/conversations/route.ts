@@ -305,21 +305,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create the conversation
-    const { data: conversation, error: createError } = await supabase
+    // Create the conversation with a client-side UUID so we can insert
+    // participants before querying the conversation (avoids RLS issue where
+    // the SELECT RETURNING triggers a policy check before the participant
+    // record exists).
+    const convId = crypto.randomUUID();
+
+    const { error: createError } = await supabase
       .from("conversations")
       .insert({
+        id: convId,
         created_by: user.id,
         is_group: allParticipantIds.length > 2,
-      })
-      .select("*")
-      .single();
+      });
 
     if (createError) throw createError;
 
     // Add participants
     const participantRows = allParticipantIds.map((uid) => ({
-      conversation_id: conversation.id,
+      conversation_id: convId,
       user_id: uid,
     }));
 
@@ -328,6 +332,21 @@ export async function POST(request: NextRequest) {
       .insert(participantRows);
 
     if (partInsertError) throw partInsertError;
+
+    // Fetch the created conversation (now that we're a participant, RLS allows it)
+    const { data: conversation, error: fetchError } = await supabase
+      .from("conversations")
+      .select("*")
+      .eq("id", convId)
+      .single();
+
+    if (fetchError || !conversation) {
+      console.error("Failed to fetch created conversation:", fetchError);
+      return NextResponse.json(
+        { error: "Conversation created but failed to fetch details" },
+        { status: 500 }
+      );
+    }
 
     // Fetch profiles for the response
     const { data: newProfiles } = await supabase
