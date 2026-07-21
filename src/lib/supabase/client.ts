@@ -1,11 +1,13 @@
 import { createBrowserClient } from "@supabase/ssr";
 import type { Database } from "@/lib/supabase/types";
 
+let client: ReturnType<typeof createBrowserClient<Database>> | null = null;
+
 /**
  * Create a Supabase client for use in Client Components and hooks.
  *
- * This uses the browser's built-in cookie storage for auth session
- * management. Call this once per component or use a singleton pattern.
+ * Returns a singleton instance so all hooks (auth, realtime, etc.)
+ * share the same client with the same in-memory auth session.
  *
  * Usage:
  * ```tsx
@@ -14,10 +16,12 @@ import type { Database } from "@/lib/supabase/types";
  * ```
  */
 export function createClient() {
-  return createBrowserClient<Database>(
+  if (client) return client;
+  client = createBrowserClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
+  return client;
 }
 
 /**
