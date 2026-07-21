@@ -168,13 +168,6 @@ export async function GET(_request: NextRequest) {
     return NextResponse.json({ conversations: result });
   } catch (error) {
     console.error("Get conversations error:", error);
-    // Log each error property separately (Vercel truncates long lines)
-    const err = error as Record<string, unknown>;
-    if (err && typeof err === 'object') {
-      for (const key of Object.keys(err)) {
-        console.error(`  conv_err.${key}:`, (err as any)[key]);
-      }
-    }
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

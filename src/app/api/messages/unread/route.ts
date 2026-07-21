@@ -23,7 +23,6 @@ export async function GET(_request: NextRequest) {
     return NextResponse.json(data ?? []);
   } catch (error) {
     console.error("Unread counts error:", error);
-    console.error("Unread full:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
