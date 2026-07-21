@@ -69,8 +69,8 @@ export function applyPendingCookies(
   response: NextResponse,
   pendingCookies: PendingCookie[],
 ) {
-  for (const { name, value } of pendingCookies) {
-    response.cookies.set(name, value);
+  for (const { name, value, options } of pendingCookies) {
+    response.cookies.set(name, value, options);
   }
 }
 

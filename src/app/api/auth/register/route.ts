@@ -138,9 +138,11 @@ export async function POST(request: NextRequest) {
       { status: 201 },
     );
 
-    // Apply auth cookies onto the actual response
-    for (const { name, value } of pendingCookies) {
-      response.cookies.set(name, value);
+    // Apply auth cookies onto the actual response, preserving options
+    // (httpOnly: false is critical so the browser client can read the
+    // auth token for Realtime WebSocket connections)
+    for (const { name, value, options } of pendingCookies) {
+      response.cookies.set(name, value, options);
     }
 
     return response;
