@@ -16,7 +16,7 @@ export function MessageActions({ onEdit, onDelete }: MessageActionsProps) {
       <Button
         variant="ghost"
         size="sm"
-        className="h-6 w-6 p-0"
+        className="min-h-11 min-w-11 !p-0"
         onClick={() => setIsOpen(!isOpen)}
       >
         <span className="font-mono text-xs">...</span>

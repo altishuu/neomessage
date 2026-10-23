@@ -142,7 +142,7 @@ export function MessageInput({
   };
 
   return (
-    <div className="flex flex-col gap-2 px-4 py-3 border-t border-border bg-surface">
+    <div className="flex flex-col gap-2 px-3 sm:px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] border-t border-border bg-surface">
       {/* Attachment Preview */}
       {attachment && (
         <div className="flex items-center gap-2 p-2 bg-surface-raised border border-border rounded-sm relative w-fit max-w-xs">
@@ -194,11 +194,11 @@ export function MessageInput({
             disabled={disabled || sending}
             className={cn(
               "w-full bg-surface-raised border border-border rounded-sm px-3 py-2.5 pr-10",
-              "font-mono text-sm text-text placeholder:text-text-muted resize-none",
+              "font-mono text-base sm:text-sm text-text placeholder:text-text-muted resize-none",
               "focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus/30",
               "transition-colors duration-150",
               "disabled:opacity-40 disabled:cursor-not-allowed",
-              "min-h-[38px] max-h-[160px]"
+              "min-h-11 max-h-[160px]"
             )}
           />
         </div>
@@ -214,7 +214,7 @@ export function MessageInput({
           <Button
             variant="ghost"
             size="md"
-            className="flex-shrink-0"
+            className="min-h-11 min-w-11 !p-0 flex-shrink-0"
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled || sending || uploading}
           >
@@ -225,7 +225,7 @@ export function MessageInput({
             size="md"
             onClick={handleSend}
             disabled={(!content.trim() && !attachment) || sending || disabled}
-            className="flex-shrink-0"
+            className="min-h-11 flex-shrink-0"
           >
             {sending ? "..." : "Send"}
           </Button>

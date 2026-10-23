@@ -260,6 +260,7 @@ export default function ConversationPage() {
         participants={conversation.participants}
         isGroup={conversation.isGroup}
         typingUsers={typingUsers}
+        onBack={() => router.push("/chat")}
         onAddParticipants={
           conversation.isGroup
             ? () => setShowAddParticipants(true)

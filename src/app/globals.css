@@ -78,3 +78,51 @@ body {
 .animation-delay-400 {
   animation-delay: 0.4s;
 }
+
+/* Touch-friendly chat actions; hover-only controls stay hidden on desktop. */
+.hover-action,
+.touch-action {
+  opacity: 1;
+}
+
+.message-reaction-picker {
+  position: static;
+  justify-content: flex-end;
+  margin-top: 0.25rem;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .hover-action,
+  .touch-action {
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+
+  .group:hover .hover-action,
+  .group:hover .touch-action {
+    opacity: 1;
+  }
+
+  .touch-action {
+    pointer-events: none;
+  }
+
+  .group:hover .touch-action {
+    pointer-events: auto;
+  }
+
+  .message-reaction-picker {
+    position: absolute;
+    right: 0.5rem;
+    bottom: -0.75rem;
+    margin-top: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 150ms ease;
+  }
+
+  .group:hover .message-reaction-picker {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}

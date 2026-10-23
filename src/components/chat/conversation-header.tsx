@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowLeft } from "lucide-react";
 import type { User } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
@@ -12,6 +13,7 @@ interface ConversationHeaderProps {
   onAddParticipants?: () => void;
   onLeaveGroup?: () => void;
   onDeleteConversation?: () => void;
+  onBack?: () => void;
 }
 
 export function ConversationHeader({
@@ -21,6 +23,7 @@ export function ConversationHeader({
   onAddParticipants,
   onLeaveGroup,
   onDeleteConversation,
+  onBack,
 }: ConversationHeaderProps) {
   const { user } = useAuth();
   const [showMenu, setShowMenu] = useState(false);
@@ -49,7 +52,17 @@ export function ConversationHeader({
   const showMenuButton = onDeleteConversation || onLeaveGroup;
 
   return (
-    <header className="flex items-center gap-3 px-4 py-3 border-b border-border bg-surface-raised flex-shrink-0">
+    <header className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-3 border-b border-border bg-surface-raised flex-shrink-0">
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back to conversations"
+          className="md:hidden inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-sm text-text-dim hover:bg-surface-overlay hover:text-cyan focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border-focus"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </button>
+      )}
       <div className="flex items-center gap-2 min-w-0">
         <span
           className={cn(
@@ -58,7 +71,7 @@ export function ConversationHeader({
           )}
         />
         <div className="min-w-0">
-          <span className="font-mono text-sm font-semibold text-text truncate block max-w-[200px]">
+          <span className="font-mono text-sm font-semibold text-text truncate block max-w-[42vw] sm:max-w-[200px]">
             {displayName}
           </span>
           {isGroup && (
@@ -71,7 +84,7 @@ export function ConversationHeader({
 
       <div className="flex items-center gap-3 ml-auto">
         {othersTyping.length > 0 ? (
-          <span className="font-mono text-[10px] text-cyan animate-pulse">
+          <span className="hidden sm:inline font-mono text-[10px] text-cyan animate-pulse">
             ~$ {typingText} {othersTyping.length > 1 ? "are" : "is"} typing
             <span className="inline-flex ml-0.5">
               <span className="animate-typing-dot">.</span>
@@ -80,7 +93,7 @@ export function ConversationHeader({
             </span>
           </span>
         ) : (
-          <span className="font-mono text-[10px] text-text-muted">
+          <span className="hidden sm:inline font-mono text-[10px] text-text-muted">
             online
           </span>
         )}
@@ -90,7 +103,7 @@ export function ConversationHeader({
           <div className="relative">
             <button
               onClick={() => setShowMenu((prev) => !prev)}
-              className="font-mono text-xs text-text-dim hover:text-text transition-colors px-2"
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm px-2 font-mono text-xs text-text-dim hover:text-text transition-colors"
             >
               ...
             </button>

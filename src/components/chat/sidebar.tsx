@@ -10,6 +10,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { NewConversationModal } from "@/components/chat/new-conversation-modal";
 import { AvatarDropdown } from "@/components/chat/avatar-dropdown";
+import type { getMobileChatView } from "@/lib/chat-navigation-state.mjs";
 import { SearchPanel } from "@/components/chat/search-panel";
 
 function PinIcon({ pinned }: { pinned: boolean }) {
@@ -41,7 +42,11 @@ function PinIcon({ pinned }: { pinned: boolean }) {
   );
 }
 
-export function Sidebar() {
+export function Sidebar({
+  mobileView,
+}: {
+  mobileView: ReturnType<typeof getMobileChatView>;
+}) {
   const router = useRouter();
   const params = useParams();
   const activeId = params?.conversationId as string | undefined;
@@ -153,7 +158,12 @@ export function Sidebar() {
 
   return (
     <>
-      <aside className="w-[320px] flex-shrink-0 border-r border-border bg-surface flex flex-col h-full">
+      <aside
+        className={cn(
+          "w-full md:w-[320px] md:flex-shrink-0 border-r border-border bg-surface flex-col h-full",
+          mobileView === "conversation" ? "hidden md:flex" : "flex",
+        )}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div className="flex items-center gap-2">
@@ -281,8 +291,7 @@ export function Sidebar() {
                             }}
                             className={cn(
                               "flex items-center justify-center",
-                              !conv.isPinned &&
-                                "opacity-0 group-hover/conversation:opacity-100 transition-opacity"
+                              !conv.isPinned && "hover-action transition-opacity"
                             )}
                           >
                             <PinIcon pinned={conv.isPinned} />

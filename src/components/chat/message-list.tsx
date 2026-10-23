@@ -191,12 +191,12 @@ export function MessageList({
       <div
         key={msg.id}
         className={cn(
-          "flex items-start gap-3 px-4 py-2 group",
+          "flex items-start gap-2 sm:gap-3 px-3 sm:px-4 py-2 group",
           isMine ? "flex-row-reverse" : "flex-row",
         )}
       >
         {isMine && !isDeleted && (
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+          <div className="touch-action transition-opacity flex-shrink-0">
             <MessageActions
               onEdit={() => handleEdit(msg)}
               onDelete={() => handleDelete(msg)}
@@ -206,7 +206,7 @@ export function MessageList({
 
         <div
           className={cn(
-            "max-w-[70%] min-w-[100px] rounded-sm px-3 py-2 relative",
+            "max-w-[88%] sm:max-w-[70%] min-w-[100px] rounded-sm px-3 py-2 relative",
             isMine
               ? "bg-magenta/10 border border-magenta/30"
               : "bg-surface-raised border border-border",
@@ -375,9 +375,8 @@ export function MessageList({
           {!isDeleted && (
             <div
               className={cn(
-                "absolute -bottom-3 right-2 flex items-center gap-0.5",
+                "message-reaction-picker flex items-center gap-0.5",
                 "bg-surface border border-border rounded-sm px-1.5 py-1 shadow-lg",
-                "opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none group-hover:pointer-events-auto",
                 "z-10",
               )}
             >
